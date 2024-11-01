@@ -188,22 +188,8 @@ impl Seance {
             settings_dialog: None,
         }
     }
-}
 
-impl eframe::App for Seance {
-    fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        eframe::set_value(
-            storage,
-            eframe::APP_KEY,
-            &PersistentStorage {
-                dark_mode: self.dark_mode,
-                passes: self.passes.clone(),
-                print_device: self.print_device.clone(),
-            },
-        );
-    }
-
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn handle_ui_messages(&mut self, ctx: &egui::Context) {
         while let Ok(msg) = self.ui_message_rx.try_recv() {
             match msg {
                 UIMessage::ShowOpenFileDialog => {
@@ -411,6 +397,24 @@ impl eframe::App for Seance {
                 }
             }
         }
+    }
+}
+
+impl eframe::App for Seance {
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        eframe::set_value(
+            storage,
+            eframe::APP_KEY,
+            &PersistentStorage {
+                dark_mode: self.dark_mode,
+                passes: self.passes.clone(),
+                print_device: self.print_device.clone(),
+            },
+        );
+    }
+
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.handle_ui_messages(ctx);
 
         if !FileDialog::poll(&self.file_dialog, &self.ui_message_tx, &mut self.hasher) {
             let _ = self.file_dialog.take();
