@@ -26,7 +26,7 @@ use preview::{DesignPreview, RenderThreadTx, MAX_ZOOM_LEVEL, MIN_ZOOM_LEVEL};
 use crate::{
     all_capitalisations_of, cut_file, default_passes,
     svg::{parse_svg, SVG_UNITS_PER_MM},
-    DesignFile, PrintDevice, ToolPass, BED_HEIGHT_MM, BED_WIDTH_MM,
+    DesignFile, PrintDevice, SendToDeviceError, ToolPass, BED_HEIGHT_MM, BED_WIDTH_MM,
 };
 
 #[cfg(target_os = "windows")]
@@ -217,7 +217,7 @@ impl Seance {
                                 .pick_file();
                             let _ = tx.send(file);
                         });
-                        self.file_dialog = Some(FileDialog::OpenSettings { rx });
+                        self.file_dialog = Some(FileDialog::OpenToolPaths { rx });
                     }
                 }
                 UIMessage::ShowExportToolPathSettingsDialog => {
@@ -251,7 +251,7 @@ impl Seance {
 
                         let _ = tx.send(());
                     });
-                    self.file_dialog = Some(FileDialog::ExportSettings { rx });
+                    self.file_dialog = Some(FileDialog::ExportToolPaths { rx });
                 }
                 UIMessage::ShowError { error, details } => {
                     self.current_error = Some((error, details));
@@ -721,12 +721,12 @@ enum FileDialog {
         rx: oneshot::Receiver<Option<PathBuf>>,
     },
     /// A file dialog for opening a tool path settings file.
-    OpenSettings {
+    OpenToolPaths {
         /// The channel that the selected file will be received from, or `None` if no file was selected.
         rx: oneshot::Receiver<Option<PathBuf>>,
     },
     /// A file dialog for exporting tool path settings to a file.
-    ExportSettings {
+    ExportToolPaths {
         /// The channel that the selected file will be received from, or `None` if no file was selected.
         rx: oneshot::Receiver<()>,
     },
@@ -774,56 +774,23 @@ impl FileDialog {
                     }
                     Err(oneshot::TryRecvError::Empty) => {}
                 },
-                FileDialog::OpenSettings { rx } => match rx.try_recv() {
+                FileDialog::OpenToolPaths { rx } => match rx.try_recv() {
                     Ok(path) => {
                         keep_dialog = false;
 
                         if let Some(path) = path {
-                            let Some(extension) = path.extension() else {
-                                let _ = ui_message_tx.send(UIMessage::ShowError {
-                                    error: "File does not have a file extension".to_string(),
-                                    details: None,
-                                });
-                                return false;
-                            };
-
-                            if !extension.eq_ignore_ascii_case("json") {
-                                let _ = ui_message_tx.send(UIMessage::ShowError {
-                                    error: format!(
-                                        "Unrecognised extension {}",
-                                        extension.to_string_lossy()
-                                    ),
-                                    details: None,
-                                });
-                                return false;
+                            match Self::handle_open_tool_paths(&path) {
+                                Ok(passes) => {
+                                    let _ = ui_message_tx
+                                        .send(UIMessage::ToolPassesListChanged { passes });
+                                }
+                                Err(err) => {
+                                    let _ = ui_message_tx.send(UIMessage::ShowError {
+                                        error: err,
+                                        details: None,
+                                    });
+                                }
                             }
-
-                            let Ok(bytes) = fs::read(path) else {
-                                let _ = ui_message_tx.send(UIMessage::ShowError {
-                                    error: "Could not load file".to_string(),
-                                    details: None,
-                                });
-                                return false;
-                            };
-
-                            let Ok(json_string) = String::from_utf8(bytes) else {
-                                let _ = ui_message_tx.send(UIMessage::ShowError {
-                                    error: "Could not decode file".to_string(),
-                                    details: None,
-                                });
-                                return false;
-                            };
-
-                            let Ok(passes) = serde_json::from_str::<[ToolPass; 16]>(&json_string)
-                            else {
-                                let _ = ui_message_tx.send(UIMessage::ShowError {
-                                    error: "Could not load tool passes from file".to_string(),
-                                    details: None,
-                                });
-                                return false;
-                            };
-
-                            let _ = ui_message_tx.send(UIMessage::ToolPassesListChanged { passes });
                         }
                     }
                     Err(oneshot::TryRecvError::Disconnected) => {
@@ -831,7 +798,7 @@ impl FileDialog {
                     }
                     Err(oneshot::TryRecvError::Empty) => {}
                 },
-                FileDialog::ExportSettings { rx } => match rx.try_recv() {
+                FileDialog::ExportToolPaths { rx } => match rx.try_recv() {
                     Ok(_) | Err(oneshot::TryRecvError::Disconnected) => {
                         keep_dialog = false;
                     }
@@ -841,6 +808,40 @@ impl FileDialog {
         }
 
         keep_dialog
+    }
+
+    /// Handle opening a settings file.
+    ///
+    /// # Arguments
+    /// * `path`: The path to the settings file to open.
+    ///
+    /// # Returns
+    /// Loaded tool passes, otherwise an error string.
+    fn handle_open_tool_paths(path: &PathBuf) -> Result<[ToolPass; 16], String> {
+        let Some(extension) = path.extension() else {
+            return Err("File does not have a file extension".to_string());
+        };
+
+        if !extension.eq_ignore_ascii_case("json") {
+            return Err(format!(
+                "Unrecognised extension {}",
+                extension.to_string_lossy()
+            ));
+        }
+
+        let Ok(bytes) = fs::read(path) else {
+            return Err("Could not load file".to_string());
+        };
+
+        let Ok(json_string) = String::from_utf8(bytes) else {
+            return Err("Could not decode file".to_string());
+        };
+
+        let Ok(passes) = serde_json::from_str::<[ToolPass; 16]>(&json_string) else {
+            return Err("Could not load tool passes from file".to_string());
+        };
+
+        Ok(passes)
     }
 }
 
@@ -893,45 +894,7 @@ fn toolbar_widget(
                         if let Ok(design_lock) = design_file.read() {
                             if let Some(file) = &*design_lock {
                                 if let Err(err) = cut_file(file, tool_passes, print_device) {
-                                    log::error!("Error cutting design: {err:?}");
-                                    let (error, details) = match err {
-                                        crate::SendToDeviceError::ErrorParsingSvg(error) => {
-                                            let details = match error {
-                                                usvg::Error::NotAnUtf8Str => {
-                                                    "File is not UTF-8 encoded".to_string()
-                                                },
-                                                usvg::Error::MalformedGZip => {
-                                                    "Malformed GZip".to_string()
-                                                },
-                                                usvg::Error::ElementsLimitReached => {
-                                                    "Reached the limit of number of elements that can be processed".to_string()
-                                                },
-                                                usvg::Error::InvalidSize => {
-                                                    "Design is an invalid size".to_string()
-                                                },
-                                                usvg::Error::ParsingFailed(error) => {
-                                                    format!("Failed to parse the design file: {error:?}")
-                                                },
-                                            };
-                                            (
-                                                "Error processing design".to_string(),
-                                                format!("Error from SVG parsing library: {details}")
-                                            )
-                                        },
-                                        crate::SendToDeviceError::FailedToOpenPrinter(err) => {
-                                            (
-                                                "Error opening printer".to_string(),
-                                                format!("I/O error: {err:?}")
-                                            )
-                                        }
-                                        crate::SendToDeviceError::FailedToWriteToPrinter(err) => {
-                                            (
-                                                "Error writing to printer".to_string(),
-                                                format!("I/O error: {err:?}")
-                                            )
-                                        }
-                                    };
-                                    let _ = ui_message_tx.send(UIMessage::ShowError { error, details: Some(details) });
+                                    handle_cut_file_error(err, ui_message_tx);
                                 }
                             }
                         }
@@ -939,6 +902,46 @@ fn toolbar_widget(
                 });
             });
         })
+}
+
+/// Handle an error produced when trying to cut a design file.
+///
+/// # Arguments
+/// * `err`: The error that was produced.
+/// * `ui_message_tx`: Channel into which UI events can be sent.
+fn handle_cut_file_error(err: SendToDeviceError, ui_message_tx: &UIMessageTx) {
+    log::error!("Error cutting design: {err:?}");
+    let (error, details) = match err {
+        crate::SendToDeviceError::ErrorParsingSvg(error) => {
+            let details = match error {
+                usvg::Error::NotAnUtf8Str => "File is not UTF-8 encoded".to_string(),
+                usvg::Error::MalformedGZip => "Malformed GZip".to_string(),
+                usvg::Error::ElementsLimitReached => {
+                    "Reached the limit of number of elements that can be processed".to_string()
+                }
+                usvg::Error::InvalidSize => "Design is an invalid size".to_string(),
+                usvg::Error::ParsingFailed(error) => {
+                    format!("Failed to parse the design file: {error:?}")
+                }
+            };
+            (
+                "Error processing design".to_string(),
+                format!("Error from SVG parsing library: {details}"),
+            )
+        }
+        crate::SendToDeviceError::FailedToOpenPrinter(err) => (
+            "Error opening printer".to_string(),
+            format!("I/O error: {err:?}"),
+        ),
+        crate::SendToDeviceError::FailedToWriteToPrinter(err) => (
+            "Error writing to printer".to_string(),
+            format!("I/O error: {err:?}"),
+        ),
+    };
+    let _ = ui_message_tx.send(UIMessage::ShowError {
+        error,
+        details: Some(details),
+    });
 }
 
 /// Draws a widget for displaying/editing the tool passes.
