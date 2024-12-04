@@ -25,6 +25,7 @@ fn main() -> eframe::Result {
             .with_drag_and_drop(true),
         follow_system_theme: true,
         default_theme: eframe::Theme::Dark,
+        renderer: eframe::Renderer::Wgpu,
         persist_window: true,
         ..Default::default()
     };

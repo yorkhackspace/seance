@@ -26,8 +26,10 @@ egui = "0.28"
 eframe = { version = "0.28", default-features = false, features = [
     "accesskit",
     "default_fonts",
-    "glow",
+    "wgpu",
     "persistence",
+    "x11",
+    "wayland"
 ] }
 log = "0.4"
 

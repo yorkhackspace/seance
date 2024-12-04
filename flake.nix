@@ -158,6 +158,8 @@
         ];
         buildInputs = with pkgs; [
           pkg-config
+
+          # So many things required for wgpu
           libxkbcommon
           libGL
           fontconfig
@@ -166,6 +168,17 @@
           xorg.libXrandr
           xorg.libXi
           xorg.libX11
+          alsa-lib
+          freetype
+          shaderc
+          directx-shader-compiler
+          cmake
+          vulkan-headers
+          vulkan-loader
+          vulkan-tools
+          vulkan-tools-lunarg
+          vulkan-extension-layer
+          vulkan-validation-layers
         ];
       in with pkgs; {
         formatter = pkgs.alejadra;
@@ -173,7 +186,7 @@
         devShells.default = mkShell rec {
           inherit buildInputs nativeBuildInputs;
 
-          LD_LIBRARY_PATH = "${lib.makeLibraryPath buildInputs}";
+          LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${builtins.toString (pkgs.lib.makeLibraryPath buildInputs)}";
           RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
         };
       });
