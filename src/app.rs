@@ -568,6 +568,14 @@ impl eframe::App for Seance {
                 let _ = self.ui_message_tx.send(UIMessage::SpaceKeyPressed);
             }
         });
+
+        // We need to redraw the UI until the design preview has finished rendering,
+        // otherwise the user may be left very frustrated that it is taking a while to render.
+        if let Some(preview) = &self.design_preview_image {
+            if preview.is_rendering() {
+                ctx.request_repaint();
+            }
+        }
     }
 }
 
