@@ -17,7 +17,8 @@ use std::{
 };
 
 pub use app::Seance;
-pub use app::{render_task, RenderThreadMessage};
+pub use app::{render_task, RenderRequest};
+use egui::Vec2;
 use hpgl::generate_hpgl;
 use laser_passes::ToolPass;
 use paths::resolve_paths;
@@ -209,6 +210,7 @@ impl Default for PrintDevice {
 /// * `design_file`: The design to send to the printer-like device.
 /// * `tool_passes`: Passes of the cutting tool.
 /// * `print_device`: The device to send the design to.
+/// * `offset`: How much to move the design by relative to its starting position, in mm, where +x is more right and +y is more down.
 ///
 /// # Returns
 /// `Ok(())` if the file has been sent correctly, otherwise a [`SendToDeviceError`].
@@ -216,11 +218,12 @@ pub fn cut_file(
     design_file: &DesignFile,
     tool_passes: &[ToolPass; 16],
     print_device: &PrintDevice,
+    offset: &Vec2,
 ) -> Result<(), SendToDeviceError> {
     let design_name = design_file.name();
 
     let paths = get_paths_grouped_by_colour(&design_file.tree)?;
-    let resolved_paths = resolve_paths(&paths, &tool_passes);
+    let resolved_paths = resolve_paths(&paths, &tool_passes, offset);
     let hpgl = generate_hpgl(&resolved_paths, &tool_passes);
     let pcl = wrap_hpgl_in_pcl(hpgl, &design_name, &tool_passes);
     print_device.print(&pcl)?;

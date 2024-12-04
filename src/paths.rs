@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 
+use egui::Vec2;
 use lyon_algorithms::geom::euclid::UnknownUnit;
 use lyon_algorithms::path::math::Point;
 use lyon_algorithms::path::PathSlice;
@@ -40,12 +41,14 @@ pub struct PathColour(pub [u8; 3]);
 /// # Arguments
 /// * `paths_grouped_by_colour`: The paths to be traced, grouped by their colour.
 /// * `tool_passes`: The toolhead passes to be done.
+/// * `offset`: How much to move the design by relative to its starting position, in mm, where +x is more right and +y is more down.
 ///
 /// # Returns
 /// A set of resolved paths, grouped by path colour.
 pub fn resolve_paths(
     paths_grouped_by_colour: &HashMap<PathColour, Vec<Box<Path>>>,
     tool_passes: &[ToolPass; 16],
+    offset: &Vec2,
 ) -> HashMap<PathColour, Vec<ResolvedPath>> {
     let mut resolved_paths: HashMap<PathColour, Vec<ResolvedPath>> = HashMap::new();
 
@@ -130,7 +133,8 @@ pub fn resolve_paths(
                 let built_path = path_builder.build();
                 let mut points = vec![];
                 points_along_path(built_path.as_slice(), &mut points);
-                for point in points {
+                for mut point in points {
+                    offset_point(&mut point, offset);
                     resolved_points.push(point.into());
                 }
 
@@ -189,6 +193,16 @@ fn points_along_path<'path_slice>(path: PathSlice<'path_slice>, points: &mut Vec
     // Start walking at the beginning of the path.
     let start_offset = 0.0;
     walk_along_path(path.iter(), start_offset, tolerance, &mut pattern);
+}
+
+/// Offset a point, in place.
+///
+/// # Arguments
+/// * `point`: The point to offset.
+/// * `offset`: Offset in mm, where +x is more right and +y is more down.
+fn offset_point(point: &mut Point, offset: &Vec2) {
+    point.x += offset.x;
+    point.y += offset.y
 }
 
 /// Takes a vector of points expressed in mm and turns them into a vector of resolved points.

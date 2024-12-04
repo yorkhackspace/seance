@@ -3,7 +3,7 @@
 //! Contains the entry point for the egui APP.
 
 mod preview;
-pub use preview::{render_task, RenderThreadMessage};
+pub use preview::{render_task, RenderRequest};
 use resvg::usvg;
 
 use std::{
@@ -11,23 +11,30 @@ use std::{
     fs,
     hash::{self, DefaultHasher, Hash, Hasher},
     path::PathBuf,
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
     time::Duration,
 };
 
 use egui::{
-    Align, Color32, Frame, Key, Label, Layout, Margin, Pos2, Rect, ScrollArea, Sense, Slider,
-    Stroke, TextEdit, Vec2, Visuals, WidgetText,
+    Align, Color32, Frame, Key, Label, Layout, Margin, Pos2, Rect, RichText, ScrollArea, Sense,
+    Slider, Stroke, TextEdit, Vec2, Visuals, WidgetText,
 };
 use egui_dnd::{dnd, DragDropConfig};
 use egui_extras::{Size, StripBuilder};
-use preview::{DesignPreview, RenderThreadTx, MAX_ZOOM_LEVEL, MIN_ZOOM_LEVEL};
+use preview::{DesignPreview, MAX_ZOOM_LEVEL, MIN_ZOOM_LEVEL};
 
 use crate::{
     all_capitalisations_of, cut_file, default_passes,
     svg::{parse_svg, SVG_UNITS_PER_MM},
     DesignFile, PrintDevice, SendToDeviceError, ToolPass, BED_HEIGHT_MM, BED_WIDTH_MM,
 };
+
+/// The minimum amount that a design can be moved by.
+const MINIMUM_DEFAULT_DESIGN_MOVE_STEP_MM: f32 = 0.1;
+/// The default amount that designs are moved by.
+const DEFAULT_DESIGN_MOVE_STEP_MM: f32 = 10.0;
+/// The maximum amount that designs can be moved by.
+const MAXIMUM_DESIGN_MOVE_STEP_MM: f32 = 500.0;
 
 #[cfg(target_os = "windows")]
 use crate::USBPort;
@@ -41,6 +48,8 @@ struct PersistentStorage {
     passes: [ToolPass; 16],
     /// The print device configuration.
     print_device: PrintDevice,
+    /// How much to move the design by each time a movement button is pressed.
+    design_move_step_mm: f32,
 }
 
 /// The Seance UI app.
@@ -58,10 +67,12 @@ pub struct Seance {
     ui_message_tx: UIMessageTx,
     /// The message channel that UI events will be sent into.
     ui_message_rx: UIMessageRx,
-    /// A message channel into which requests can be sent in order to re-render the design preview.
-    render_request_tx: RenderThreadTx,
+    /// Where to put requests to re-render the design preview.
+    render_request: Arc<Mutex<Option<RenderRequest>>>,
     /// The hasher to use to calculate the hash of the design file.
     hasher: Box<dyn Hasher>,
+    /// Amount to move the design by when moving.
+    design_move_step_mm: f32,
 
     /// The states of all of the tool pass widgets.
     tool_pass_widget_states: Vec<ToolPassWidgetState>,
@@ -113,11 +124,14 @@ impl Seance {
     ///
     /// # Arguments
     /// * `cc`: An eframe creation context.
-    /// * `render_request_tx`: A channel into which messages can be sent to request re-render of the design preview.
+    /// * `render_request`: Where to put requests to re-render the design preview.
     ///
     /// # Returns
     /// A new instance of the [`Seance`] UI.
-    pub fn new(cc: &eframe::CreationContext<'_>, render_request_tx: RenderThreadTx) -> Self {
+    pub fn new(
+        cc: &eframe::CreationContext<'_>,
+        render_request: Arc<Mutex<Option<RenderRequest>>>,
+    ) -> Self {
         let default_pens = default_passes::default_passes();
         let (ui_message_tx, ui_message_rx) = std::sync::mpsc::channel();
 
@@ -127,6 +141,7 @@ impl Seance {
                     dark_mode: cc.egui_ctx.style().visuals.dark_mode,
                     passes: default_pens,
                     print_device: PrintDevice::default(),
+                    design_move_step_mm: DEFAULT_DESIGN_MOVE_STEP_MM,
                 });
             if seance_storage.dark_mode {
                 cc.egui_ctx.set_visuals(Visuals::dark());
@@ -150,8 +165,9 @@ impl Seance {
                 design_file: Default::default(),
                 ui_message_tx,
                 ui_message_rx,
-                render_request_tx,
+                render_request,
                 hasher: Box::new(DefaultHasher::new()),
+                design_move_step_mm: seance_storage.design_move_step_mm,
 
                 tool_pass_widget_states: laser_pass_widget_states,
                 previous_frame_widgets: Default::default(),
@@ -176,8 +192,9 @@ impl Seance {
             design_file: Default::default(),
             ui_message_tx,
             ui_message_rx,
-            render_request_tx,
+            render_request,
             hasher: Box::new(DefaultHasher::new()),
+            design_move_step_mm: DEFAULT_DESIGN_MOVE_STEP_MM,
 
             tool_pass_widget_states: laser_passes_widget_states,
             previous_frame_widgets: Default::default(),
@@ -364,11 +381,25 @@ impl Seance {
                             size_before_wrap,
                             self.preview_zoom_level,
                             &self.design_file,
-                            self.render_request_tx.clone(),
+                            self.render_request.clone(),
                         )
                     });
                     if resize {
                         preview.resize(size_before_wrap, &self.design_file);
+                    }
+                }
+                UIMessage::DesignMoveStepChanged { step } => {
+                    self.design_move_step_mm = step;
+                }
+                UIMessage::MoveDesign { direction, step } => {
+                    if let Some(preview) = &mut self.design_preview_image {
+                        let new_offset = direction.apply(preview.get_design_offset(), step);
+                        preview.set_design_offset(new_offset, &self.design_file);
+                    }
+                }
+                UIMessage::ResetDesignPosition => {
+                    if let Some(preview) = &mut self.design_preview_image {
+                        preview.set_design_offset(Default::default(), &self.design_file);
                     }
                 }
                 UIMessage::EnterKeyPressed => {
@@ -409,6 +440,7 @@ impl eframe::App for Seance {
                 dark_mode: self.dark_mode,
                 passes: self.passes.clone(),
                 print_device: self.print_device.clone(),
+                design_move_step_mm: self.design_move_step_mm,
             },
         );
     }
@@ -477,76 +509,28 @@ impl eframe::App for Seance {
                                     &self.design_file,
                                     &self.passes,
                                     &self.print_device,
+                                    &self
+                                        .design_preview_image
+                                        .as_ref()
+                                        .map(|preview| preview.get_design_offset())
+                                        .cloned()
+                                        .unwrap_or_default(),
                                     &self.ui_message_tx,
                                 );
                             });
                     });
                     strip.cell(|ui| {
-                        StripBuilder::new(ui)
-                            .size(Size::relative(0.2).at_least(525.0))
-                            .size(Size::remainder())
-                            .horizontal(|mut strip| {
-                                strip.cell(|ui| {
-                                    tool_passes_widget(
-                                        ui,
-                                        &mut self.passes,
-                                        &mut self.tool_pass_widget_states,
-                                        &mut self.previous_frame_widgets,
-                                        &self.ui_message_tx,
-                                    );
-                                });
-                                strip.cell(|ui| {
-                                    let ratio = BED_HEIGHT_MM / BED_WIDTH_MM;
-                                    let mut width = ui.available_width();
-                                    let mut height = width * ratio;
-                                    let max_height = ui.available_height() * 0.8;
-                                    if height > max_height {
-                                        height = max_height;
-                                        width = height / ratio;
-                                    }
-
-                                    StripBuilder::new(ui)
-                                        .size(Size::exact(height))
-                                        .size(Size::remainder())
-                                        .vertical(|mut strip| {
-                                            strip.cell(|ui| {
-                                                // Design Preview.
-                                                Frame::default().fill(Color32::LIGHT_GRAY).show(
-                                                    ui,
-                                                    |ui| {
-                                                        design_file_widget(
-                                                            ui,
-                                                            &self.design_file,
-                                                            &mut self.design_preview_image,
-                                                            &self.ui_message_tx,
-                                                            egui::Vec2 {
-                                                                x: width,
-                                                                y: height,
-                                                            },
-                                                        );
-                                                    },
-                                                );
-                                            });
-                                            strip.cell(|ui| {
-                                                ui.horizontal(|ui| {
-                                                    let mut zoom_value = self.preview_zoom_level;
-                                                    let zoom_widget = Slider::new(
-                                                        &mut zoom_value,
-                                                        MIN_ZOOM_LEVEL..=MAX_ZOOM_LEVEL,
-                                                    );
-                                                    ui.label("Zoom");
-                                                    if ui.add(zoom_widget).changed() {
-                                                        let _ = self.ui_message_tx.send(
-                                                            UIMessage::PreviewZoomLevelChanged {
-                                                                zoom: zoom_value,
-                                                            },
-                                                        );
-                                                    }
-                                                });
-                                            });
-                                        });
-                                });
-                            });
+                        ui_main(
+                            ui,
+                            &mut self.passes,
+                            &mut self.tool_pass_widget_states,
+                            &mut self.previous_frame_widgets,
+                            &self.design_file,
+                            &mut self.design_preview_image,
+                            self.preview_zoom_level,
+                            self.design_move_step_mm,
+                            &self.ui_message_tx,
+                        );
                     });
                 });
         });
@@ -686,6 +670,22 @@ enum UIMessage {
         /// The size available for the design preview.
         size_before_wrap: egui::Vec2,
     },
+    /// The amount to move the design by has changed.
+    DesignMoveStepChanged {
+        /// The new step amount, in mm.
+        step: f32,
+    },
+    /// Move the design around the bed.
+    ///
+    /// In the case of diagonal moves, the step specifies the amount of diagonal distance that will be moved.
+    MoveDesign {
+        /// The direction in which to move the design.
+        direction: DesignMoveDirection,
+        /// The amount to move the design in mm.
+        step: f32,
+    },
+    /// Reset the design to align with the top-left edge.
+    ResetDesignPosition,
     /// The enter key has been pressed.
     EnterKeyPressed,
     /// The tab key has been pressed.
@@ -711,6 +711,78 @@ enum SeanceUIElement {
         /// The index of the tool pass for which this is the speed label.
         index: usize,
     },
+}
+
+/// The directions in which the design can be moved.
+enum DesignMoveDirection {
+    /// Up and then left.
+    UpAndLeft,
+    /// Up.
+    Up,
+    /// Up and then right.
+    UpAndRight,
+    /// Left.
+    Left,
+    /// Right.
+    Right,
+    /// Down and then left.
+    DownAndLeft,
+    /// Down.
+    Down,
+    /// Down and then right.
+    DownAndRight,
+}
+
+impl DesignMoveDirection {
+    /// Apply this move to an offset (in mm), returning the new offset.
+    ///
+    /// Offsets are defined such that +x is more right and +y is more down.
+    ///
+    /// # Arguments
+    /// * `current_offset`: The offset to apply the move to.
+    /// * `step_mm`: The amount to move by, in mm.
+    ///
+    /// # Returns
+    /// A new offset, in mm.
+    pub fn apply(&self, current_offset: &egui::Vec2, step_mm: f32) -> egui::Vec2 {
+        let mut offset = current_offset.clone();
+        match self {
+            DesignMoveDirection::UpAndLeft => {
+                let step_each_side = step_mm / (2.0f32.sqrt());
+                offset.x -= step_each_side;
+                offset.y -= step_each_side;
+            }
+            DesignMoveDirection::Up => {
+                offset.y -= step_mm;
+            }
+            DesignMoveDirection::UpAndRight => {
+                let step_each_side = step_mm / (2.0f32.sqrt());
+                offset.x += step_each_side;
+                offset.y -= step_each_side;
+            }
+            DesignMoveDirection::Left => {
+                offset.x -= step_mm;
+            }
+            DesignMoveDirection::Right => {
+                offset.x += step_mm;
+            }
+            DesignMoveDirection::DownAndLeft => {
+                let step_each_side = step_mm / (2.0f32.sqrt());
+                offset.x -= step_each_side;
+                offset.y += step_each_side;
+            }
+            DesignMoveDirection::Down => {
+                offset.y += step_mm;
+            }
+            DesignMoveDirection::DownAndRight => {
+                let step_each_side = step_mm / (2.0f32.sqrt());
+                offset.x += step_each_side;
+                offset.y += step_each_side;
+            }
+        }
+
+        offset
+    }
 }
 
 /// The types of file dialog that can be opened.
@@ -852,6 +924,7 @@ impl FileDialog {
 /// * `design_file`: The currently loaded design file, if any.
 /// * `tool_passes`: The current passes of the tool.
 /// * `print_device`: The device to use as our "printer".
+/// * `offset`: How much to move the design by relative to its starting position, in mm, where +x is more right and +y is more down.
 /// * `ui_message_tx`: Channel that can be used to send events.
 ///
 /// # Returns
@@ -861,6 +934,7 @@ fn toolbar_widget(
     design_file: &Arc<RwLock<Option<DesignFile>>>,
     tool_passes: &[ToolPass; 16],
     print_device: &PrintDevice,
+    offset: &Vec2,
     ui_message_tx: &UIMessageTx,
 ) -> egui::Response {
     StripBuilder::new(ui)
@@ -893,7 +967,7 @@ fn toolbar_widget(
                     if ui.add_enabled(print_device.is_valid(), button).on_hover_text(hover_text).clicked() {
                         if let Ok(design_lock) = design_file.read() {
                             if let Some(file) = &*design_lock {
-                                if let Err(err) = cut_file(file, tool_passes, print_device) {
+                                if let Err(err) = cut_file(file, tool_passes, print_device, offset) {
                                     handle_cut_file_error(err, ui_message_tx);
                                 }
                             }
@@ -942,6 +1016,205 @@ fn handle_cut_file_error(err: SendToDeviceError, ui_message_tx: &UIMessageTx) {
         error,
         details: Some(details),
     });
+}
+
+/// Draws the main UI (tool paths and design preview).
+///
+/// # Arguments
+/// * `ui`: The UI to draw the widget to.
+/// * `tool_passes`: The passes of the tool head.
+/// * `tool_pass_widget_states`: Current states of tool pass widgets.
+/// * `frame_widgets`: Map of widgets being drawn this frame.
+/// * `design_file`: The loaded design file, if any.
+/// * `design_preview_image`: The preview image to draw to the UI.
+/// * `preview_zoom_level`: How much the preview image is zoomed in.
+/// * `design_move_step_mm`: The current amount to step the design by when moving it.
+/// * `ui_message_tx`: Channel into which UI events can be sent.
+fn ui_main(
+    ui: &mut egui::Ui,
+    tool_passes: &mut [ToolPass; 16],
+    tool_pass_widget_states: &mut [ToolPassWidgetState],
+    frame_widgets: &mut HashMap<egui::Id, SeanceUIElement>,
+    design_file: &Arc<RwLock<Option<DesignFile>>>,
+    design_preview_image: &mut Option<DesignPreview>,
+    preview_zoom_level: f32,
+    design_move_step_mm: f32,
+    ui_message_tx: &UIMessageTx,
+) {
+    StripBuilder::new(ui)
+        .size(Size::relative(0.2).at_least(525.0))
+        .size(Size::remainder())
+        .horizontal(|mut strip| {
+            strip.cell(|ui| {
+                tool_passes_widget(
+                    ui,
+                    tool_passes,
+                    tool_pass_widget_states,
+                    frame_widgets,
+                    ui_message_tx,
+                );
+            });
+            strip.cell(|ui| {
+                let ratio = BED_HEIGHT_MM / BED_WIDTH_MM;
+                let mut width = ui.available_width();
+                let mut height = width * ratio;
+                let max_height = ui.available_height() * 0.8;
+                if height > max_height {
+                    height = max_height;
+                    width = height / ratio;
+                }
+
+                StripBuilder::new(ui)
+                    .size(Size::exact(height))
+                    .size(Size::remainder())
+                    .vertical(|mut strip| {
+                        strip.cell(|ui| {
+                            // Design Preview.
+                            Frame::default().fill(Color32::LIGHT_GRAY).show(ui, |ui| {
+                                design_file_widget(
+                                    ui,
+                                    design_file,
+                                    design_preview_image,
+                                    ui_message_tx,
+                                    egui::Vec2 {
+                                        x: width,
+                                        y: height,
+                                    },
+                                );
+                            });
+                        });
+                        strip.cell(|ui| {
+                            ui.horizontal(|ui| {
+                                let mut zoom_value = preview_zoom_level;
+                                let zoom_widget =
+                                    Slider::new(&mut zoom_value, MIN_ZOOM_LEVEL..=MAX_ZOOM_LEVEL);
+                                ui.label("Zoom");
+                                if ui.add(zoom_widget).changed() {
+                                    let _ =
+                                        ui_message_tx.send(UIMessage::PreviewZoomLevelChanged {
+                                            zoom: zoom_value,
+                                        });
+                                }
+                            });
+                            ui.separator();
+                            ui.label("Position Design");
+                            ui.horizontal(|ui| {
+                                ui.vertical(|ui| {
+                                    const GRID_WIDTH: usize = 3;
+                                    const GRID_HEIGHT: usize = 3;
+                                    // Buttons to be displayed along with their tooltips and associated events.
+                                    let buttons: [(&str, &str, UIMessage);
+                                        GRID_WIDTH * GRID_HEIGHT] = [
+                                        (
+                                            "↖",
+                                            "Up and to the left",
+                                            UIMessage::MoveDesign {
+                                                direction: DesignMoveDirection::UpAndLeft,
+                                                step: design_move_step_mm,
+                                            },
+                                        ),
+                                        (
+                                            "↑",
+                                            "Up",
+                                            UIMessage::MoveDesign {
+                                                direction: DesignMoveDirection::Up,
+                                                step: design_move_step_mm,
+                                            },
+                                        ),
+                                        (
+                                            "↗",
+                                            "Up and to the right",
+                                            UIMessage::MoveDesign {
+                                                direction: DesignMoveDirection::UpAndRight,
+                                                step: design_move_step_mm,
+                                            },
+                                        ),
+                                        (
+                                            "←",
+                                            "Left",
+                                            UIMessage::MoveDesign {
+                                                direction: DesignMoveDirection::Left,
+                                                step: design_move_step_mm,
+                                            },
+                                        ),
+                                        ("⇱", "Reset to top-left", UIMessage::ResetDesignPosition),
+                                        (
+                                            "→",
+                                            "Right",
+                                            UIMessage::MoveDesign {
+                                                direction: DesignMoveDirection::Right,
+                                                step: design_move_step_mm,
+                                            },
+                                        ),
+                                        (
+                                            "↙",
+                                            "Down and to the left",
+                                            UIMessage::MoveDesign {
+                                                direction: DesignMoveDirection::DownAndLeft,
+                                                step: design_move_step_mm,
+                                            },
+                                        ),
+                                        (
+                                            "↓",
+                                            "Down",
+                                            UIMessage::MoveDesign {
+                                                direction: DesignMoveDirection::Down,
+                                                step: design_move_step_mm,
+                                            },
+                                        ),
+                                        (
+                                            "↘",
+                                            "Down and to the right",
+                                            UIMessage::MoveDesign {
+                                                direction: DesignMoveDirection::DownAndRight,
+                                                step: design_move_step_mm,
+                                            },
+                                        ),
+                                    ];
+
+                                    let mut buttons_iter = buttons.into_iter();
+
+                                    for _ in 0..GRID_HEIGHT {
+                                        ui.horizontal(|ui| {
+                                            for _ in 0..GRID_WIDTH {
+                                                let (button_text, tooltip, event) = buttons_iter
+                                                    .next()
+                                                    .expect("There must be a button");
+                                                if ui
+                                                    .button(RichText::new(button_text).text_style(
+                                                        egui::TextStyle::Name(
+                                                            "Movement Buttons".into(),
+                                                        ),
+                                                    ))
+                                                    .on_hover_text(tooltip)
+                                                    .clicked()
+                                                {
+                                                    let _ = ui_message_tx.send(event);
+                                                }
+                                            }
+                                        });
+                                    }
+                                });
+                                ui.vertical(|ui| {
+                                    let mut step_value = design_move_step_mm;
+                                    let step_by_widget = Slider::new(
+                                        &mut step_value,
+                                        MINIMUM_DEFAULT_DESIGN_MOVE_STEP_MM
+                                            ..=MAXIMUM_DESIGN_MOVE_STEP_MM,
+                                    );
+                                    ui.label("Step By (mm)");
+                                    if ui.add(step_by_widget).changed() {
+                                        let _ =
+                                            ui_message_tx.send(UIMessage::DesignMoveStepChanged {
+                                                step: step_value,
+                                            });
+                                    }
+                                });
+                            });
+                        });
+                    });
+            });
+        });
 }
 
 /// Draws a widget for displaying/editing the tool passes.
