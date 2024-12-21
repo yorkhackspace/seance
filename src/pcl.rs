@@ -16,7 +16,7 @@ const ESC: char = '\x1b';
 ///
 /// # Returns
 /// PCL string that can be sent to the machine.
-pub fn wrap_hpgl_in_pcl(hpgl: String, filename: &str, laser_passes: &[ToolPass; 16]) -> String {
+pub fn wrap_hpgl_in_pcl(hpgl: String, filename: &str, laser_passes: &Vec<ToolPass>) -> String {
     vec![
         pjl_universal_exit_language(),
         pcl_reset(),
@@ -90,51 +90,45 @@ fn pcl_filename(filename: &str) -> String {
 ///
 /// # Returns
 /// A PCL string containing the pens table.
-fn pcl_pen_table(tool_passes: &[ToolPass; 16]) -> String {
+fn pcl_pen_table(tool_passes: &Vec<ToolPass>) -> String {
+    let num_pens = tool_passes.len();
+    let message_bytes = num_pens * 4;
+
     let mut result = String::new();
-    result += &format!("{ESC}!v16R");
+    result += &format!("{ESC}!v{num_pens}R");
 
     for _ in tool_passes {
         result.extend(['1']);
     }
 
     // Pen PPI
-    result += &format!("{ESC}!v64I");
+    result += &format!("{ESC}!v{message_bytes}I");
     for _ in tool_passes {
         result += "0400";
     }
 
     // Pen Speed
-    result += &format!("{ESC}!v64V");
+    result += &format!("{ESC}!v{message_bytes}V");
     for pen in tool_passes {
         result += &format!("{:0>4}", pen.speed());
     }
 
     // Pen Power
-    result += &format!("{ESC}!v64P");
+    result += &format!("{ESC}!v{message_bytes}P");
     for pen in tool_passes {
         result += &format!("{:0>4}", pen.power());
     }
 
     // Pen enable.
     // TODO: Should be based on enabled pens.
-    result += &format!("{ESC}!v16D");
-    result.push(ascii::AsciiChar::SOX.into());
-    result.push(ascii::AsciiChar::SOX.into());
-    result.push(ascii::AsciiChar::SOX.into());
-    result.push(ascii::AsciiChar::Null.into());
-    result.push(ascii::AsciiChar::Null.into());
-    result.push(ascii::AsciiChar::Null.into());
-    result.push(ascii::AsciiChar::Null.into());
-    result.push(ascii::AsciiChar::Null.into());
-    result.push(ascii::AsciiChar::Null.into());
-    result.push(ascii::AsciiChar::Null.into());
-    result.push(ascii::AsciiChar::Null.into());
-    result.push(ascii::AsciiChar::Null.into());
-    result.push(ascii::AsciiChar::Null.into());
-    result.push(ascii::AsciiChar::Null.into());
-    result.push(ascii::AsciiChar::Null.into());
-    result.push(ascii::AsciiChar::Null.into());
+    result += &format!("{ESC}!v{num_pens}D");
+    for pass in tool_passes {
+        if *pass.enabled() {
+            result.push(ascii::AsciiChar::SOX.into());
+        } else {
+            result.push(ascii::AsciiChar::Null.into());
+        }
+    }
 
     result
 }

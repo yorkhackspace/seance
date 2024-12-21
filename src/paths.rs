@@ -47,7 +47,7 @@ pub struct PathColour(pub [u8; 3]);
 /// A set of resolved paths, grouped by path colour.
 pub fn resolve_paths(
     paths_grouped_by_colour: &HashMap<PathColour, Vec<Box<Path>>>,
-    tool_passes: &[ToolPass; 16],
+    tool_passes: &Vec<ToolPass>,
     offset: &Vec2,
 ) -> HashMap<PathColour, Vec<ResolvedPath>> {
     let mut resolved_paths: HashMap<PathColour, Vec<ResolvedPath>> = HashMap::new();

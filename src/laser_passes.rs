@@ -12,6 +12,8 @@ pub struct ToolPass {
     speed: u64,
     /// Raster engrave.
     rast: bool,
+    /// Enable or disbale this tool pass
+    enable: bool,
 }
 
 impl ToolPass {
@@ -30,21 +32,14 @@ impl ToolPass {
     /// # Returns
     /// A new [`ToolPass`] with values appropriately clamped.
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        name: String,
-        r: u8,
-        g: u8,
-        b: u8,
-        power: u64,
-        speed: u64,
-        rast: bool,
-    ) -> Self {
+    pub fn new(name: String, r: u8, g: u8, b: u8, power: u64, speed: u64, rast: bool) -> Self {
         ToolPass {
             name,
             colour: [r, g, b],
             power: power.min(1000),
             speed: speed.min(1000),
             rast,
+            enable: true,
         }
     }
 
@@ -110,5 +105,21 @@ impl ToolPass {
     /// * `power`: The new power of the tool pass.
     pub fn set_power(&mut self, power: u64) {
         self.power = power.min(1000);
+    }
+
+    /// Gets the enable state of the tool pass
+    ///
+    /// # Returns
+    /// Whether the tool pass is enabled
+    pub fn enabled(&self) -> &bool {
+        &self.enable
+    }
+
+    /// Sets the enable state of the tool pass
+    ///
+    /// # Arguments
+    /// * `new_state`: The new enable state of the tool pass.
+    pub fn set_enabled(&mut self, new_state: bool) {
+        self.enable = new_state;
     }
 }
