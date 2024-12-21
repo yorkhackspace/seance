@@ -93,7 +93,8 @@ pub fn resolve_paths(
                                 .into(),
                             );
                         }
-                        // The target point is the end of the curve, the first control point is towards the beginning of the curve, the second control point is towards the end of the curve.
+                        // The target point is the end of the curve, the first control point is towards the beginning
+                        // of the curve, the second control point is towards the end of the curve.
                         usvg::tiny_skia_path::PathSegment::CubicTo(
                             first_control_point,
                             second_control_point,
