@@ -107,7 +107,7 @@
           fenixPkgs = fenix.packages.${buildSystem};
 
           mkToolchain = fenixPkgs: fenixPkgs.toolchainOf {
-            channel = "1.76";
+            channel = "1.83";
             sha256 = "sha256-e4mlaJehWBymYxJGgnbuCObVlqMlQSilZ8FljG9zPHY=";
           };
 

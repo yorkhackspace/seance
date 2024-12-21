@@ -3,7 +3,7 @@ name = "seance"
 version = "0.1.0"
 edition = "2021"
 include = ["**/*.rs", "Cargo.toml"]
-rust-version = "1.76"
+rust-version = "1.83"
 
 [package.metadata.docs.rs]
 all-features = true
