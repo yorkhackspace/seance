@@ -12,8 +12,6 @@ pub struct ToolPass {
     speed: u64,
     /// Raster engrave.
     rast: bool,
-    /// ? Unknown.
-    vect: bool,
 }
 
 impl ToolPass {
@@ -40,7 +38,6 @@ impl ToolPass {
         power: u64,
         speed: u64,
         rast: bool,
-        vect: bool,
     ) -> Self {
         ToolPass {
             name,
@@ -48,7 +45,6 @@ impl ToolPass {
             power: power.min(1000),
             speed: speed.min(1000),
             rast,
-            vect,
         }
     }
 
