@@ -15,12 +15,21 @@ use crate::{
 /// HPGL as a string.
 pub fn generate_hpgl(
     resolved_paths: &HashMap<PathColour, Vec<ResolvedPath>>,
-    tool_passes: &[ToolPass; 16],
+    tool_passes: &Vec<ToolPass>,
 ) -> String {
+    let Some((first_pen, _)) = tool_passes
+        .iter()
+        .enumerate()
+        .find(|(_, pass)| *pass.enabled())
+    else {
+        return "".to_string();
+    };
+
     // In, Default Coordinate System, Pen Up, Select Pen 1, Reset scaling points to default positions.
     // TODO: Select first pen, not always Pen 1.
     let var_name = format!(
-        "IN;SC;PU;SP1;LT;PU{},{};",
+        "IN;SC;PU;SP{};LT;PU{},{};",
+        first_pen + 1,
         mm_to_hpgl_units(0.0, true),
         mm_to_hpgl_units(0.0, false)
     );
@@ -40,7 +49,8 @@ pub fn generate_hpgl(
     }
 
     hpgl.push_str(&format!(
-        "PU{},{};SP0;EC0;EC1;OE;",
+        "PU{},{};SP{};EC0;EC1;OE;",
+        first_pen + 1,
         mm_to_hpgl_units(0.0, true),
         mm_to_hpgl_units(0.0, false)
     ));

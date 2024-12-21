@@ -45,7 +45,7 @@ struct PersistentStorage {
     /// Whether the UI should be dark mode.
     dark_mode: bool,
     /// The tool passes to run on the machine.
-    passes: [ToolPass; 16],
+    passes: Vec<ToolPass>,
     /// The print device configuration.
     print_device: PrintDevice,
     /// How much to move the design by each time a movement button is pressed.
@@ -57,7 +57,7 @@ pub struct Seance {
     /// Whether the UI should be dark mode.
     dark_mode: bool,
     /// The tool passes to run on the machine.
-    passes: [ToolPass; 16],
+    passes: Vec<ToolPass>,
     /// The print device configuration.
     print_device: PrintDevice,
 
@@ -368,6 +368,11 @@ impl Seance {
                         &self.ui_message_tx,
                     );
                 }
+                UIMessage::ToolPassEnableChanged { index, enabled } => {
+                    if let Some(pass) = self.passes.get_mut(index) {
+                        pass.set_enabled(enabled);
+                    }
+                }
                 UIMessage::PreviewZoomLevelChanged { zoom } => {
                     self.preview_zoom_level = zoom.min(MAX_ZOOM_LEVEL).max(MIN_ZOOM_LEVEL);
                     if let Some(preview) = &mut self.design_preview_image {
@@ -620,7 +625,7 @@ enum UIMessage {
     /// It is not used for changes to individual options made on individual tool passes.
     ToolPassesListChanged {
         /// The new list of tool passes.
-        passes: [ToolPass; 16],
+        passes: Vec<ToolPass>,
     },
     /// The name of a tool pass has changed.
     ToolPassNameChanged {
@@ -671,8 +676,14 @@ enum UIMessage {
     },
     /// The speed of a tool pass has lost focus.
     ToolPassSpeedLostFocus,
+    ToolPassEnableChanged {
+        index: usize,
+        enabled: bool,
+    },
     /// The zoom level of the design preview has changed.
-    PreviewZoomLevelChanged { zoom: f32 },
+    PreviewZoomLevelChanged {
+        zoom: f32,
+    },
     /// This event is emitted when we know how large the design preview area is (e.g. after UI resize).
     DesignPreviewSize {
         /// The size available for the design preview.
@@ -897,7 +908,7 @@ impl FileDialog {
     ///
     /// # Returns
     /// Loaded tool passes, otherwise an error string.
-    fn handle_open_tool_paths(path: &PathBuf) -> Result<[ToolPass; 16], String> {
+    fn handle_open_tool_paths(path: &PathBuf) -> Result<Vec<ToolPass>, String> {
         let Some(extension) = path.extension() else {
             return Err("File does not have a file extension".to_string());
         };
@@ -917,7 +928,7 @@ impl FileDialog {
             return Err("Could not decode file".to_string());
         };
 
-        let Ok(passes) = serde_json::from_str::<[ToolPass; 16]>(&json_string) else {
+        let Ok(passes) = serde_json::from_str::<Vec<ToolPass>>(&json_string) else {
             return Err("Could not load tool passes from file".to_string());
         };
 
@@ -940,7 +951,7 @@ impl FileDialog {
 fn toolbar_widget(
     ui: &mut egui::Ui,
     design_file: &Arc<RwLock<Option<DesignFile>>>,
-    tool_passes: &[ToolPass; 16],
+    tool_passes: &Vec<ToolPass>,
     print_device: &PrintDevice,
     offset: &Vec2,
     ui_message_tx: &UIMessageTx,
@@ -1040,8 +1051,8 @@ fn handle_cut_file_error(err: SendToDeviceError, ui_message_tx: &UIMessageTx) {
 /// * `ui_message_tx`: Channel into which UI events can be sent.
 fn ui_main(
     ui: &mut egui::Ui,
-    tool_passes: &mut [ToolPass; 16],
-    tool_pass_widget_states: &mut [ToolPassWidgetState],
+    tool_passes: &mut Vec<ToolPass>,
+    tool_pass_widget_states: &mut Vec<ToolPassWidgetState>,
     frame_widgets: &mut HashMap<egui::Id, SeanceUIElement>,
     design_file: &Arc<RwLock<Option<DesignFile>>>,
     design_preview_image: &mut Option<DesignPreview>,
@@ -1235,8 +1246,8 @@ fn ui_main(
 /// * `ui_message_tx`: A channel for sending UI messages into.
 fn tool_passes_widget(
     ui: &mut egui::Ui,
-    tool_passes: &mut [ToolPass; 16],
-    tool_pass_widget_states: &mut [ToolPassWidgetState],
+    tool_passes: &mut Vec<ToolPass>,
+    tool_pass_widget_states: &mut Vec<ToolPassWidgetState>,
     frame_widgets: &mut HashMap<egui::Id, SeanceUIElement>,
     ui_message_tx: &UIMessageTx,
 ) {
@@ -1345,15 +1356,17 @@ fn tool_pass_widget(
 ) -> egui::Response {
     StripBuilder::new(ui)
         .size(Size::exact(20.0))
-        .sizes(Size::remainder(), 5)
+        .sizes(Size::remainder(), 6)
         .horizontal(|mut strip| {
+            // Drag Handle
             strip.cell(|ui| {
                 Frame::default().inner_margin(2.0).show(ui, |ui| {
                     ui.label("☰").on_hover_cursor(egui::CursorIcon::Grab);
                 });
             });
+            // ToolPass Name
             strip.cell(|ui| {
-                Frame::default().inner_margin(6.0).show(ui, |ui| {
+                Frame::default().inner_margin(5.0).show(ui, |ui| {
                     let mut pen_name = tool_pass.name().to_string();
                     if matches!(state.editing, ToolPassWidgetEditing::Name) {
                         let text_edit = ui.add(
@@ -1392,6 +1405,7 @@ fn tool_pass_widget(
                     }
                 });
             });
+            // Power Field
             strip.cell(|ui| {
                 Frame::default().inner_margin(10.0).show(ui, |ui| {
                     let pen_power_str = &mut state.power_editing_text;
@@ -1426,6 +1440,7 @@ fn tool_pass_widget(
                     }
                 });
             });
+            // Speed Field
             strip.cell(|ui| {
                 Frame::default().inner_margin(10.0).show(ui, |ui| {
                     let pen_speed_str = &mut state.speed_editing_text;
@@ -1460,6 +1475,7 @@ fn tool_pass_widget(
                     }
                 });
             });
+            // Colour Hex-code
             strip.cell(|ui| {
                 Frame::default().inner_margin(6.0).show(ui, |ui| {
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -1470,6 +1486,7 @@ fn tool_pass_widget(
                     });
                 });
             });
+            // Colour Swatch
             strip.cell(|ui| {
                 let mut colour = tool_pass.colour().clone();
                 if ui.color_edit_button_srgb(&mut colour).changed() {
@@ -1478,6 +1495,17 @@ fn tool_pass_widget(
                         colour: colour.clone(),
                     });
                 };
+            });
+            // Enable Checkbox
+            strip.cell(|ui| {
+                let mut enabled_val = tool_pass.enabled().clone();
+                let enable_box = ui.checkbox(&mut enabled_val, "");
+                if enable_box.changed() {
+                    let _ = ui_message_tx.send(UIMessage::ToolPassEnableChanged {
+                        index: pass_index,
+                        enabled: enabled_val.clone(),
+                    });
+                }
             });
         })
 }
@@ -1838,7 +1866,7 @@ fn load_design(path: &PathBuf, hasher: &mut Box<dyn hash::Hasher>) -> Result<Des
 fn focus_changing(
     ctx: &egui::Context,
     previous_frame_widgets: &HashMap<egui::Id, SeanceUIElement>,
-    tool_pass_widget_states: &mut [ToolPassWidgetState],
+    tool_pass_widget_states: &mut Vec<ToolPassWidgetState>,
     ui_message_tx: &UIMessageTx,
 ) {
     let mut allow_move = true;

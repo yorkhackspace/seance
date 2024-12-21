@@ -216,7 +216,7 @@ impl Default for PrintDevice {
 /// `Ok(())` if the file has been sent correctly, otherwise a [`SendToDeviceError`].
 pub fn cut_file(
     design_file: &DesignFile,
-    tool_passes: &[ToolPass; 16],
+    tool_passes: &Vec<ToolPass>,
     print_device: &PrintDevice,
     offset: &Vec2,
 ) -> Result<(), SendToDeviceError> {
