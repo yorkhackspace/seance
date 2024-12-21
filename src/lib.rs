@@ -1,6 +1,6 @@
 //! `seance`
 //!
-//! A utility for talking to devices that seak HPGL.
+//! A utility for talking to devices that speak HPGL.
 
 mod app;
 mod default_passes;
