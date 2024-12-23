@@ -3149,12 +3149,8 @@ dependencies = [
  "hidapi-rusb",
  "log",
  "lyon_algorithms",
- "oneshot",
  "resvg 0.43.0",
- "rfd",
  "serde",
- "serde_json",
- "tempfile",
  "usb_enumeration",
  "windows 0.58.0",
 ]
