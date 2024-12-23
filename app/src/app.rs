@@ -23,7 +23,7 @@ use egui_dnd::{dnd, DragDropConfig};
 use egui_extras::{Size, StripBuilder};
 use preview::{DesignPreview, MAX_ZOOM_LEVEL, MIN_ZOOM_LEVEL};
 
-use crate::{
+use seance::{
     all_capitalisations_of, cut_file, default_passes,
     svg::{parse_svg, SVG_UNITS_PER_MM},
     DesignFile, PrintDevice, SendToDeviceError, ToolPass, BED_HEIGHT_MM, BED_WIDTH_MM,
@@ -975,7 +975,7 @@ fn toolbar_widget(
                     if ui.add_enabled(print_device.is_valid(), button).on_hover_text(hover_text).clicked() {
                         if let Ok(design_lock) = design_file.read() {
                             if let Some(file) = &*design_lock {
-                                if let Err(err) = cut_file(file, tool_passes, print_device, offset) {
+                                if let Err(err) = cut_file(file, tool_passes, print_device, (offset.x, offset.y)) {
                                     handle_cut_file_error(err, ui_message_tx);
                                 }
                             }
@@ -994,7 +994,7 @@ fn toolbar_widget(
 fn handle_cut_file_error(err: SendToDeviceError, ui_message_tx: &UIMessageTx) {
     log::error!("Error cutting design: {err:?}");
     let (error, details) = match err {
-        crate::SendToDeviceError::ErrorParsingSvg(error) => {
+        SendToDeviceError::ErrorParsingSvg(error) => {
             let details = match error {
                 usvg::Error::NotAnUtf8Str => "File is not UTF-8 encoded".to_string(),
                 usvg::Error::MalformedGZip => "Malformed GZip".to_string(),
@@ -1011,11 +1011,11 @@ fn handle_cut_file_error(err: SendToDeviceError, ui_message_tx: &UIMessageTx) {
                 format!("Error from SVG parsing library: {details}"),
             )
         }
-        crate::SendToDeviceError::FailedToOpenPrinter(err) => (
+        SendToDeviceError::FailedToOpenPrinter(err) => (
             "Error opening printer".to_string(),
             format!("I/O error: {err:?}"),
         ),
-        crate::SendToDeviceError::FailedToWriteToPrinter(err) => (
+        SendToDeviceError::FailedToWriteToPrinter(err) => (
             "Error writing to printer".to_string(),
             format!("I/O error: {err:?}"),
         ),

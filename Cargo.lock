@@ -3146,11 +3146,6 @@ name = "seance"
 version = "0.1.0"
 dependencies = [
  "ascii",
- "eframe",
- "egui",
- "egui_dnd",
- "egui_extras",
- "env_logger",
  "hidapi-rusb",
  "log",
  "lyon_algorithms",
@@ -3162,6 +3157,24 @@ dependencies = [
  "tempfile",
  "usb_enumeration",
  "windows 0.58.0",
+]
+
+[[package]]
+name = "seance-app"
+version = "0.1.0"
+dependencies = [
+ "eframe",
+ "egui",
+ "egui_dnd",
+ "egui_extras",
+ "env_logger",
+ "log",
+ "oneshot",
+ "resvg 0.43.0",
+ "rfd",
+ "seance",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

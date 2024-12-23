@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["seance"]
+members = [ "app","seance"]
 default-members = ["seance"]
 
 [workspace.package]

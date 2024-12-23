@@ -2,6 +2,12 @@
 //!
 //! A utility for talking to devices that speak HPGL.
 
+mod app;
+
+use app::Seance;
+use app::{render_task, RenderRequest};
+use egui::Vec2;
+
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
 // hide console window on Windows in release
@@ -10,7 +16,6 @@ fn main() -> eframe::Result {
     use std::sync::{Arc, Mutex};
 
     use egui::FontId;
-    use seance::{render_task, RenderRequest};
 
     env_logger::init();
 
@@ -53,7 +58,7 @@ fn main() -> eframe::Result {
             cc.egui_ctx.set_style(style);
 
             egui_extras::install_image_loaders(&cc.egui_ctx);
-            Ok(Box::new(seance::Seance::new(cc, render_request)))
+            Ok(Box::new(Seance::new(cc, render_request)))
         }),
     )
 }

@@ -11,7 +11,7 @@ use egui::{ColorImage, ImageData, TextureHandle, TextureOptions};
 use oneshot::TryRecvError;
 use resvg::{tiny_skia::Color, usvg};
 
-use crate::{DesignFile, BED_HEIGHT_MM, BED_WIDTH_MM};
+use seance::{DesignFile, BED_HEIGHT_MM, BED_WIDTH_MM};
 
 /// The maximum that we can zoom into the design preview.
 pub const MAX_ZOOM_LEVEL: f32 = 5.0;

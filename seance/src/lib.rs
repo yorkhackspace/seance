@@ -2,13 +2,12 @@
 //!
 //! A utility for talking to devices that speak HPGL.
 
-mod app;
-mod default_passes;
+pub mod default_passes;
 mod hpgl;
 mod laser_passes;
 mod paths;
 mod pcl;
-mod svg;
+pub mod svg;
 
 use std::{
     fs::OpenOptions,
@@ -16,15 +15,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub use app::Seance;
-pub use app::{render_task, RenderRequest};
-use egui::Vec2;
 use hpgl::generate_hpgl;
-use laser_passes::ToolPass;
+pub use laser_passes::ToolPass;
 use paths::resolve_paths;
 use pcl::wrap_hpgl_in_pcl;
 use resvg::usvg;
 use svg::get_paths_grouped_by_colour;
+
+type Vec2 = (f32, f32);
 
 /// Minimum X position of the X axis in mm.
 /// Actually -50.72 but the cutter refuses to move this far...
@@ -51,17 +49,17 @@ pub const DEFAULT_PRINT_DEVICE: &'static str = "/dev/usb/lp0";
 /// A loaded design.
 pub struct DesignFile {
     /// The name of the design.
-    name: String,
+    pub name: String,
     /// The path the design was loaded from.
-    path: PathBuf,
+    pub path: PathBuf,
     /// The hash of the file.
-    hash: u64,
+    pub hash: u64,
     /// The SVG tree.
-    tree: usvg::Tree,
+    pub tree: usvg::Tree,
     /// Width of the design in mm.
-    width_mm: f32,
+    pub width_mm: f32,
     /// Height of the design in mm.
-    height_mm: f32,
+    pub height_mm: f32,
 }
 
 impl DesignFile {
@@ -218,7 +216,7 @@ pub fn cut_file(
     design_file: &DesignFile,
     tool_passes: &[ToolPass; 16],
     print_device: &PrintDevice,
-    offset: &Vec2,
+    offset: Vec2,
 ) -> Result<(), SendToDeviceError> {
     let design_name = design_file.name();
 
