@@ -12,7 +12,7 @@ pub mod svg;
 use std::{
     fs::OpenOptions,
     io::{self, Write},
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 use hpgl::generate_hpgl;
@@ -50,10 +50,6 @@ pub const DEFAULT_PRINT_DEVICE: &'static str = "/dev/usb/lp0";
 pub struct DesignFile {
     /// The name of the design.
     pub name: String,
-    /// The path the design was loaded from.
-    pub path: PathBuf,
-    /// The hash of the file.
-    pub hash: u64,
     /// The SVG tree.
     pub tree: usvg::Tree,
     /// Width of the design in mm.
@@ -69,14 +65,6 @@ impl DesignFile {
     /// The name of the design.
     pub fn name(&self) -> &str {
         &self.name
-    }
-
-    /// Gets the path that the design was loaded from.
-    ///
-    /// # Returns
-    /// The path of the design file.
-    pub fn path(&self) -> &PathBuf {
-        &self.path
     }
 
     /// Gets the SVG tree.

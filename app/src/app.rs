@@ -29,6 +29,9 @@ use seance::{
     DesignFile, PrintDevice, SendToDeviceError, ToolPass, BED_HEIGHT_MM, BED_WIDTH_MM,
 };
 
+/// `DesignFile` with a hash and original path attached.
+type DesignWithMeta = (seance::DesignFile, u64, PathBuf);
+
 /// The minimum amount that a design can be moved by.
 const MINIMUM_DEFAULT_DESIGN_MOVE_STEP_MM: f32 = 0.1;
 /// The default amount that designs are moved by.
@@ -62,7 +65,7 @@ pub struct Seance {
     print_device: PrintDevice,
 
     /// The currently open design file, if any.
-    design_file: Arc<RwLock<Option<DesignFile>>>,
+    design_file: Arc<RwLock<Option<DesignWithMeta>>>,
     /// The message channel that will receive UI events.
     ui_message_tx: UIMessageTx,
     /// The message channel that UI events will be sent into.
@@ -613,7 +616,7 @@ enum UIMessage {
     /// A new design file has been loaded.
     DesignFileChanged {
         /// The design file that has been loaded.
-        design_file: DesignFile,
+        design_file: DesignWithMeta,
     },
     /// The list of tool passes have changed.
     /// This is used when the tool passes are imported, for example.
@@ -939,7 +942,7 @@ impl FileDialog {
 /// An [`egui::Response`].
 fn toolbar_widget(
     ui: &mut egui::Ui,
-    design_file: &Arc<RwLock<Option<DesignFile>>>,
+    design_file: &Arc<RwLock<Option<DesignWithMeta>>>,
     tool_passes: &[ToolPass; 16],
     print_device: &PrintDevice,
     offset: &Vec2,
@@ -975,7 +978,7 @@ fn toolbar_widget(
                     if ui.add_enabled(print_device.is_valid(), button).on_hover_text(hover_text).clicked() {
                         if let Ok(design_lock) = design_file.read() {
                             if let Some(file) = &*design_lock {
-                                if let Err(err) = cut_file(file, tool_passes, print_device, (offset.x, offset.y)) {
+                                if let Err(err) = cut_file(&file.0, tool_passes, print_device, (offset.x, offset.y)) {
                                     handle_cut_file_error(err, ui_message_tx);
                                 }
                             }
@@ -1043,7 +1046,7 @@ fn ui_main(
     tool_passes: &mut [ToolPass; 16],
     tool_pass_widget_states: &mut [ToolPassWidgetState],
     frame_widgets: &mut HashMap<egui::Id, SeanceUIElement>,
-    design_file: &Arc<RwLock<Option<DesignFile>>>,
+    design_file: &Arc<RwLock<Option<DesignWithMeta>>>,
     design_preview_image: &mut Option<DesignPreview>,
     preview_zoom_level: f32,
     design_move_step_mm: f32,
@@ -1495,7 +1498,7 @@ fn tool_pass_widget(
 /// An [`egui::Response`].
 fn design_file_widget(
     ui: &mut egui::Ui,
-    design_file: &Arc<RwLock<Option<DesignFile>>>,
+    design_file: &Arc<RwLock<Option<DesignWithMeta>>>,
     design_preview: &mut Option<DesignPreview>,
     ui_message_tx: &UIMessageTx,
     size: egui::Vec2,
@@ -1778,7 +1781,10 @@ fn settings_dialog(
 ///
 /// # Returns
 /// The design file, if successfully loaded, otherwise an error string.
-fn load_design(path: &PathBuf, hasher: &mut Box<dyn hash::Hasher>) -> Result<DesignFile, String> {
+fn load_design(
+    path: &PathBuf,
+    hasher: &mut Box<dyn hash::Hasher>,
+) -> Result<DesignWithMeta, String> {
     let mut path_without_extension = path.clone();
     path_without_extension.set_extension("");
 
@@ -1814,14 +1820,16 @@ fn load_design(path: &PathBuf, hasher: &mut Box<dyn hash::Hasher>) -> Result<Des
             bytes.hash(hasher);
             let hash = hasher.finish();
 
-            Ok(DesignFile {
-                name: file_name.to_string(),
-                path: path.to_owned(),
+            Ok((
+                DesignFile {
+                    name: file_name.to_string(),
+                    tree: svg,
+                    width_mm: width,
+                    height_mm: height,
+                },
                 hash,
-                tree: svg,
-                width_mm: width,
-                height_mm: height,
-            })
+                path.clone(),
+            ))
         }
         Err(err) => Err(format!("Failed to read file: {}", err)),
     }

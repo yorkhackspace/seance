@@ -13,6 +13,8 @@ use resvg::{tiny_skia::Color, usvg};
 
 use seance::{DesignFile, BED_HEIGHT_MM, BED_WIDTH_MM};
 
+use super::DesignWithMeta;
+
 /// The maximum that we can zoom into the design preview.
 pub const MAX_ZOOM_LEVEL: f32 = 5.0;
 /// The minimum zoom level for the design preview.
@@ -51,7 +53,7 @@ impl DesignPreview {
     pub fn new(
         size: egui::Vec2,
         mut zoom: f32,
-        design_file: &Arc<RwLock<Option<DesignFile>>>,
+        design_file: &Arc<RwLock<Option<DesignWithMeta>>>,
         render_request: Arc<Mutex<Option<RenderRequest>>>,
     ) -> Self {
         zoom = zoom.min(MAX_ZOOM_LEVEL).max(MIN_ZOOM_LEVEL);
@@ -85,7 +87,7 @@ impl DesignPreview {
     /// # Arguments
     /// * `size`: The new size of the preview.
     /// * `design_file`: The design file being drawn.
-    pub fn resize(&mut self, size: egui::Vec2, design_file: &Arc<RwLock<Option<DesignFile>>>) {
+    pub fn resize(&mut self, size: egui::Vec2, design_file: &Arc<RwLock<Option<DesignWithMeta>>>) {
         if size != self.size {
             self.size = size;
             self.render(design_file);
@@ -119,7 +121,7 @@ impl DesignPreview {
     pub fn set_design_offset(
         &mut self,
         mut offset_mm: egui::Vec2,
-        design_file: &Arc<RwLock<Option<DesignFile>>>,
+        design_file: &Arc<RwLock<Option<DesignWithMeta>>>,
     ) {
         offset_mm.x = offset_mm.x.max(0.0);
         offset_mm.y = offset_mm.y.max(0.0);
@@ -148,7 +150,7 @@ impl DesignPreview {
     pub fn image(
         &mut self,
         ctx: &egui::Context,
-        design_file: &Arc<RwLock<Option<DesignFile>>>,
+        design_file: &Arc<RwLock<Option<DesignWithMeta>>>,
     ) -> Option<egui::Image<'_>> {
         let mut waiting_render_callback = self.waiting_render_callback.take();
         if let Some(waiting) = waiting_render_callback {
@@ -205,7 +207,7 @@ impl DesignPreview {
     ///
     /// # Arguments
     /// * `design_file`: The design to render.
-    pub fn render(&mut self, design_file: &Arc<RwLock<Option<DesignFile>>>) {
+    pub fn render(&mut self, design_file: &Arc<RwLock<Option<DesignWithMeta>>>) {
         let (callback_tx, callback_rx) = oneshot::channel();
         {
             let mut render_request_lock = self
@@ -236,7 +238,7 @@ pub struct RenderRequest {
     /// Offset of the design from the top-left corner, in mm.
     design_offset_mm: egui::Vec2,
     /// The design file to render.
-    design_file: Arc<RwLock<Option<DesignFile>>>,
+    design_file: Arc<RwLock<Option<DesignWithMeta>>>,
     /// Callback to send the rendered preview into.
     callback: RenderRequestCallback,
 }
@@ -301,7 +303,7 @@ pub fn render_task(render_request: Arc<Mutex<Option<RenderRequest>>>) {
 fn render_inner(
     size: egui::Vec2,
     offset_mm: &egui::Vec2,
-    design_file: &Arc<RwLock<Option<DesignFile>>>,
+    design_file: &Arc<RwLock<Option<DesignWithMeta>>>,
     texture_buffer: &mut Vec<u8>,
     previous_design_hash: &mut Option<u64>,
     design_texture: &mut Option<resvg::tiny_skia::Pixmap>,
@@ -327,14 +329,16 @@ fn render_inner(
     let design = &*design_lock;
 
     // If we have a design file then we need to check if the hash has changed, if so then we need to re-render the design.
-    if let Some(DesignFile {
-        name: _,
-        path: _,
+    if let Some((
+        DesignFile {
+            name: _,
+            tree,
+            width_mm,
+            height_mm,
+        },
         hash,
-        tree,
-        width_mm,
-        height_mm,
-    }) = &design
+        _,
+    )) = &design
     {
         if Some(*hash) != *previous_design_hash {
             *previous_design_hash = Some(*hash);
