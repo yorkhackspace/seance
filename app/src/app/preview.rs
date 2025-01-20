@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use egui::{ColorImage, ImageData, TextureHandle, TextureOptions};
+use egui::{ColorImage, ImageData, TextureHandle, TextureOptions, Vec2};
 use oneshot::TryRecvError;
 use resvg::{tiny_skia::Color, usvg};
 
@@ -254,6 +254,7 @@ pub fn render_task(render_request: Arc<Mutex<Option<RenderRequest>>>) {
     let mut texture_buffer: Vec<u8> = vec![];
     let mut previous_design_hash: Option<u64> = None;
     let mut design_texture: Option<resvg::tiny_skia::Pixmap> = None;
+    let mut previous_size: Vec2 = Default::default();
 
     loop {
         let request = {
@@ -274,6 +275,7 @@ pub fn render_task(render_request: Arc<Mutex<Option<RenderRequest>>>) {
         {
             render_inner(
                 size,
+                previous_size,
                 &design_offset_mm,
                 &design_file,
                 &mut texture_buffer,
@@ -281,6 +283,8 @@ pub fn render_task(render_request: Arc<Mutex<Option<RenderRequest>>>) {
                 &mut design_texture,
                 callback,
             );
+
+            previous_size = size;
         }
 
         // TODO: Nasty.
@@ -294,6 +298,7 @@ pub fn render_task(render_request: Arc<Mutex<Option<RenderRequest>>>) {
 ///
 /// # Arguments
 /// * `size`: The size to draw the preview at.
+/// * `previous_size`: The previous size the preview was drawn at.
 /// * `offset_mm`: The offset of the design from the top-left corner, in mm.
 /// * `design_file`: The design file to render.
 /// * `texture_buffer`: This is the texture that is actually shown to the user.
@@ -302,6 +307,7 @@ pub fn render_task(render_request: Arc<Mutex<Option<RenderRequest>>>) {
 /// * `callback`: Callback into which the rendered image will be sent.
 fn render_inner(
     size: egui::Vec2,
+    previous_size: egui::Vec2,
     offset_mm: &egui::Vec2,
     design_file: &Arc<RwLock<Option<DesignWithMeta>>>,
     texture_buffer: &mut Vec<u8>,
@@ -309,11 +315,23 @@ fn render_inner(
     design_texture: &mut Option<resvg::tiny_skia::Pixmap>,
     callback: RenderRequestCallback,
 ) {
+    if size != previous_size {
+        invalidate_design_texture(previous_design_hash, design_texture);
+    }
+
     // Calculate how big the texture should be.
     let zoomed_bounding_box_width = size.x * MAX_ZOOM_LEVEL;
     let zoomed_bounding_box_height = size.y * MAX_ZOOM_LEVEL;
     let texture_width = zoomed_bounding_box_width.floor() as u32;
     let texture_height = zoomed_bounding_box_height.floor() as u32;
+
+    // Work out how many pixels correspond to 1mm in each dimension.
+    let pixels_per_mm_x = zoomed_bounding_box_width / BED_WIDTH_MM;
+    let pixels_per_mm_y = zoomed_bounding_box_height / BED_HEIGHT_MM;
+
+    // We want to place a marker every 10mm to give the user a point of reference, so we need to work out how many pixels correspond to 10mm.
+    let pixels_per_10_mm_x = pixels_per_mm_x * 10.0;
+    let pixels_per_10_mm_y = pixels_per_mm_y * 10.0;
 
     // Resize texture buffer to fill the bounds.
     resize_texture_buffer(
@@ -343,9 +361,8 @@ fn render_inner(
         if Some(*hash) != *previous_design_hash {
             *previous_design_hash = Some(*hash);
 
-            // Work out the proportion of the bed taken up by the design, then scale the image by this proportion and the zoom level.
-            let width = (width_mm / BED_WIDTH_MM) * size.x * MAX_ZOOM_LEVEL;
-            let height = (height_mm / BED_HEIGHT_MM) * size.y * MAX_ZOOM_LEVEL;
+            let width = width_mm * pixels_per_mm_x;
+            let height = height_mm * pixels_per_mm_y;
 
             // Create a pixmap to render to that is the scaled width and height of the design.
             let Some(mut pixmap) =
@@ -364,21 +381,13 @@ fn render_inner(
                 PREVIEW_BACKGROUND_COLOUR[3],
             ));
             // Render the design at the origin of the pixmap.
-            let transform = usvg::Transform::default();
+            let transform = usvg::Transform::default().pre_scale(2.0, 2.0);
             resvg::render(&tree, transform, &mut pixmap.as_mut());
             *design_texture = Some(pixmap);
         }
     } else {
         invalidate_design_texture(previous_design_hash, design_texture);
     }
-
-    // Work out how many pixels correspond to 1mm in each dimension.
-    let pixels_per_mm_x = zoomed_bounding_box_width / BED_WIDTH_MM;
-    let pixels_per_mm_y = zoomed_bounding_box_height / BED_HEIGHT_MM;
-
-    // We want to place a marker every 10mm to give the user a point of reference, so we need to work out how many pixels correspond to 10mm.
-    let pixels_per_10_mm_x = pixels_per_mm_x * 10.0;
-    let pixels_per_10_mm_y = pixels_per_mm_y * 10.0;
 
     for (index, pixel) in texture_buffer.chunks_exact_mut(4).enumerate() {
         // Get the x/y position of the pixel.
