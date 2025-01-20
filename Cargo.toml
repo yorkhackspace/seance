@@ -1,12 +1,16 @@
 [workspace]
 resolver = "2"
-members = [ "app","seance"]
-default-members = ["seance"]
+members = [
+    "app",
+    "app-tauri",
+    "seance"
+]
+default-members = ["seance", "app-tauri"]
 
 [workspace.package]
 edition = "2021"
 include = ["**/*.rs", "Cargo.toml"]
-rust-version = "1.83"
+rust-version = "1.77.2"
 
 [workspace.lints.rust]
 missing_docs = "deny"

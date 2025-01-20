@@ -4,7 +4,7 @@
   # Cross-compilation shamelessly lifted from https://mediocregopher.com/posts/x-compiling-rust-with-nix
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
     flake-utils.url = "github:numtide/flake-utils";
 
     # Cross-compile
@@ -150,35 +150,28 @@
       let
         overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs { inherit system overlays; };
-        rustToolchain = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
 
         nativeBuildInputs = with pkgs; [
-          rustToolchain
-          typos
+          pkg-config
+          gobject-introspection
+          cargo
+          # cargo-tauri
+          (callPackage ./cargo-tauri.nix { })
+          nodejs
         ];
         buildInputs = with pkgs; [
-          pkg-config
-
-          # So many things required for wgpu
-          libxkbcommon
-          libGL
-          fontconfig
-          wayland
-          xorg.libXcursor
-          xorg.libXrandr
-          xorg.libXi
-          xorg.libX11
-          alsa-lib
-          freetype
-          shaderc
-          directx-shader-compiler
-          cmake
-          vulkan-headers
-          vulkan-loader
-          vulkan-tools
-          vulkan-tools-lunarg
-          vulkan-extension-layer
-          vulkan-validation-layers
+          at-spi2-atk
+          atkmm
+          cairo
+          gdk-pixbuf
+          glib
+          gtk3
+          harfbuzz
+          librsvg
+          libsoup_3
+          pango
+          webkitgtk_4_1
+          openssl
         ];
       in with pkgs; {
         formatter = pkgs.alejadra;
@@ -186,8 +179,7 @@
         devShells.default = mkShell rec {
           inherit buildInputs nativeBuildInputs;
 
-          LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${builtins.toString (pkgs.lib.makeLibraryPath buildInputs)}";
-          RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
+          LD_LIBRARY_PATH="${builtins.toString (pkgs.lib.makeLibraryPath buildInputs)}:$LD_LIBRARY_PATH";
         };
       });
 }
