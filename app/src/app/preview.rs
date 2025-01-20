@@ -391,8 +391,10 @@ fn render_inner(
             // Clamp the width and height of the design so that it is not larger than the available size.
             let width = design.width().min(texture_width) as usize;
             let height = design.height().min(texture_height) as usize;
-            let x = (index % texture_width as usize).saturating_sub(offset_mm.x.floor() as usize);
-            let y = (index / texture_width as usize).saturating_sub(offset_mm.y.floor() as usize);
+            let x = (index % texture_width as usize)
+                .saturating_sub((offset_mm.x * pixels_per_mm_x).floor() as usize);
+            let y = (index / texture_width as usize)
+                .saturating_sub((offset_mm.y * pixels_per_mm_y).floor() as usize);
             if x > 0 && y > 0 && x < width && y < height {
                 // The starting index for this pixel in the design texture.
                 let design_texture_pixel_start = ((y * width) + x) * 4;
