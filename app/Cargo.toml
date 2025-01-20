@@ -1,0 +1,30 @@
+[package]
+name = "seance-app"
+version = "0.1.0"
+edition.workspace = true
+include.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+egui = "0.28"
+eframe = { version = "0.28", default-features = false, features = [
+    "accesskit",
+    "default_fonts",
+    "wgpu",
+    "persistence",
+    "x11",
+    "wayland"
+] }
+egui_extras = { version = "0.28.1", features = ["all_loaders"] }
+egui_dnd = "0.9.0"
+log = "0.4"
+env_logger = "0.10"
+oneshot = { version = "0.1.8", default-features = false, features = ["std"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1.0.120"
+resvg = "0.43.0"
+seance = { path = "../seance" }
+rfd = "0.14.1"
+
+[lints]
+workspace = true

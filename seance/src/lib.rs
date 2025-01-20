@@ -2,29 +2,27 @@
 //!
 //! A utility for talking to devices that speak HPGL.
 
-mod app;
-mod default_passes;
+pub mod default_passes;
 mod hpgl;
 mod laser_passes;
 mod paths;
 mod pcl;
-mod svg;
+pub mod svg;
 
 use std::{
     fs::OpenOptions,
     io::{self, Write},
-    path::{Path, PathBuf},
+    path::Path,
 };
 
-pub use app::Seance;
-pub use app::{render_task, RenderRequest};
-use egui::Vec2;
 use hpgl::generate_hpgl;
-use laser_passes::ToolPass;
+pub use laser_passes::ToolPass;
 use paths::resolve_paths;
 use pcl::wrap_hpgl_in_pcl;
 use resvg::usvg;
 use svg::get_paths_grouped_by_colour;
+
+type Vec2 = (f32, f32);
 
 /// Minimum X position of the X axis in mm.
 /// Actually -50.72 but the cutter refuses to move this far...
@@ -51,17 +49,13 @@ pub const DEFAULT_PRINT_DEVICE: &'static str = "/dev/usb/lp0";
 /// A loaded design.
 pub struct DesignFile {
     /// The name of the design.
-    name: String,
-    /// The path the design was loaded from.
-    path: PathBuf,
-    /// The hash of the file.
-    hash: u64,
+    pub name: String,
     /// The SVG tree.
-    tree: usvg::Tree,
+    pub tree: usvg::Tree,
     /// Width of the design in mm.
-    width_mm: f32,
+    pub width_mm: f32,
     /// Height of the design in mm.
-    height_mm: f32,
+    pub height_mm: f32,
 }
 
 impl DesignFile {
@@ -71,14 +65,6 @@ impl DesignFile {
     /// The name of the design.
     pub fn name(&self) -> &str {
         &self.name
-    }
-
-    /// Gets the path that the design was loaded from.
-    ///
-    /// # Returns
-    /// The path of the design file.
-    pub fn path(&self) -> &PathBuf {
-        &self.path
     }
 
     /// Gets the SVG tree.
@@ -218,7 +204,7 @@ pub fn cut_file(
     design_file: &DesignFile,
     tool_passes: &Vec<ToolPass>,
     print_device: &PrintDevice,
-    offset: &Vec2,
+    offset: Vec2,
 ) -> Result<(), SendToDeviceError> {
     let design_name = design_file.name();
 
@@ -229,61 +215,4 @@ pub fn cut_file(
     print_device.print(&pcl)?;
 
     Ok(())
-}
-
-/// Gets all of the possible capitalisations of a string.
-/// We need this because the library we use for showig file dialogs is not very clever,
-/// it does not match against file extensions case-insensitively. Therefore, we provide
-/// the file dialog library with all of the possible capitalisations of the file extensions
-/// we care about, just in case folks have bizarrely capitalised file extensions.
-///
-/// # Arguments
-/// * `input`: The string to generate all the capitalisations of.
-///
-/// # Returns
-/// An array of strings containing all of the possible capitalisations of the input string.
-pub fn all_capitalisations_of(input: &str) -> Vec<String> {
-    let mut result = vec![];
-
-    let bitmask = ((2_u32.pow(input.len() as u32)) - 1) as usize;
-
-    for mask in 0..=bitmask {
-        let mut new_str = String::new();
-        for i in 0..input.len() {
-            if mask & (1 << i) > 0 {
-                new_str += &input
-                    .chars()
-                    .nth(i)
-                    .expect(&format!("Could not get character {i}"))
-                    .to_uppercase()
-                    .to_string();
-            } else {
-                new_str += &input
-                    .chars()
-                    .nth(i)
-                    .expect(&format!("Could not get character {i}"))
-                    .to_lowercase()
-                    .to_string();
-            }
-        }
-        result.push(new_str);
-    }
-
-    result
-}
-
-#[cfg(test)]
-mod test {
-    use crate::all_capitalisations_of;
-
-    #[test]
-    fn capitalisations() {
-        let mut result = all_capitalisations_of("svg");
-        result.sort();
-        assert_eq!(result.len(), 8);
-        assert_eq!(
-            result,
-            vec!["SVG", "SVg", "SvG", "Svg", "sVG", "sVg", "svG", "svg"]
-        )
-    }
 }
