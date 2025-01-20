@@ -1231,6 +1231,11 @@ fn ui_main(
                                                 step: step_value,
                                             });
                                     }
+                                    if let Some(preview) = &design_preview_image {
+                                        let x = preview.get_design_offset().x;
+                                        let y = preview.get_design_offset().y;
+                                        ui.label(&format!("Current X: {x} Y: {y}"));
+                                    }
                                 });
                             });
                         });
