@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="ui.css">
+    <title>Seance</title>
+</head>
+
+<body>
+    <div class="ui-row">
+        <button id="load-design">
+            Load Design
+        </button>
+        <p>
+            Design filename.svg
+        </p>
+        <button id="reload-design">
+            Reload Design
+        </button>
+    </div>
+    <canvas id="preview"></canvas>
+    <div class="ui-row">
+        <strong>Design Offset:</strong>
+        X: <input type="text" class="textbox">
+        Y: <input type="text" class="textbox">
+        <button>Reset</button>
+        <!-- <br>
+        Design Scale:&nbsp;
+        X: <input type="text" class="textbox">
+        Y: <input type="text" class="textbox" disabled>
+        <input type="checkbox" name="scale-lock" checked>
+        <button>Reset</button> -->
+    </div>
+
+    <hr>
+
+    <table>
+        <tr>
+            <th>Order</th>0/46
+            <th>Colour</th>
+            <th>Speed</th>
+            <th>Power</th>
+            <th style="width: 3em">Run</th>
+            <th style="width: 3em">Del</th>
+        </tr>
+        <tr>
+            <td>0/46
+                <button>^</button><button>v</button>
+            </td>
+            <td>
+                <div class="swatch"></div>
+            </td>
+            <td>
+                <input type="text" value="60" class="textbox">
+            </td>
+            <td>
+                <input type="text" value="40" class="textbox">
+            </td>
+            <td>
+                <button> > </button>
+            </td>
+            <td>
+                <button> x </button>
+            </td>
+        </tr>
+        <tr>
+            <td colspan="2" style="text-align: left;">
+                <button>Add Pass</button>
+            </td>
+            <td></td>
+            <td></td>
+            <td colspan="2">
+                <button style="width: 100%">Run All</button>
+            </td>
+        </tr>
+    </table>
+
+
+</body>
+
+</html>

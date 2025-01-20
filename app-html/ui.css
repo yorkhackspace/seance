@@ -1,0 +1,74 @@
+body {
+    font-family: monospace;
+    font-size: large;
+    background-color: #333;
+    color: #ccc;
+}
+
+button {
+    font-size: large;
+    color: #ccc;
+    background-color: #222;
+    padding: 2px 5px;
+    border-radius: 0.3em;
+}
+
+canvas#preview {
+    width: 100%;
+    max-width: 50em;
+    aspect-ratio: 90/46;
+    border: black solid 1px;
+}
+
+div.ui-row {
+    width: 100%;
+    /* border: grey solid 1px; */
+    margin-bottom: 5px;
+}
+
+div.ui-row * {
+    display: inline;
+}
+
+.textbox {
+    width: 5em;
+    font-size: large;
+    background-color: #ccc;
+    border-radius: 0.3em;
+}
+
+.textbox:disabled {
+    background-color: #888;
+}
+
+table {
+    width: 100%;
+    max-width: 30em;
+}
+
+th {
+    text-align: left;
+}
+
+td,
+th {
+    text-align: center;
+}
+
+td>button,
+td>div {
+    display: inline-block;
+}
+
+.swatch {
+    height: 1.5em;
+    width: 3em;
+    background-color: red;
+    box-sizing: border-box;
+    border: black solid 1px;
+    vertical-align: middle;
+}
+
+hr {
+    border-color: #ccc;
+}
