@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use egui::Vec2;
+use crate::Vec2;
 use lyon_algorithms::geom::euclid::UnknownUnit;
 use lyon_algorithms::path::math::Point;
 use lyon_algorithms::path::PathSlice;
@@ -48,7 +48,7 @@ pub struct PathColour(pub [u8; 3]);
 pub fn resolve_paths(
     paths_grouped_by_colour: &HashMap<PathColour, Vec<Box<Path>>>,
     tool_passes: &Vec<ToolPass>,
-    offset: &Vec2,
+    offset: Vec2,
 ) -> HashMap<PathColour, Vec<ResolvedPath>> {
     let mut resolved_paths: HashMap<PathColour, Vec<ResolvedPath>> = HashMap::new();
 
@@ -201,9 +201,9 @@ fn points_along_path<'path_slice>(path: PathSlice<'path_slice>, points: &mut Vec
 /// # Arguments
 /// * `point`: The point to offset.
 /// * `offset`: Offset in mm, where +x is more right and +y is more down.
-fn offset_point(point: &mut Point, offset: &Vec2) {
-    point.x += offset.x;
-    point.y += offset.y
+fn offset_point(point: &mut Point, (ox, oy): Vec2) {
+    point.x += ox;
+    point.y += oy
 }
 
 /// Takes a vector of points expressed in mm and turns them into a vector of resolved points.

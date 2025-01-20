@@ -1,3 +1,4 @@
+//! A set of default passes that are populated when the program first starts
 use crate::ToolPass;
 
 /// Gets the default tool passes.

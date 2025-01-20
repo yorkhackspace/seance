@@ -23,11 +23,14 @@ use egui_dnd::{dnd, DragDropConfig};
 use egui_extras::{Size, StripBuilder};
 use preview::{DesignPreview, MAX_ZOOM_LEVEL, MIN_ZOOM_LEVEL};
 
-use crate::{
-    all_capitalisations_of, cut_file, default_passes,
+use seance::{
+    cut_file, default_passes,
     svg::{parse_svg, SVG_UNITS_PER_MM},
     DesignFile, PrintDevice, SendToDeviceError, ToolPass, BED_HEIGHT_MM, BED_WIDTH_MM,
 };
+
+/// `DesignFile` with a hash and original path attached.
+type DesignWithMeta = (seance::DesignFile, u64, PathBuf);
 
 /// The minimum amount that a design can be moved by.
 const MINIMUM_DEFAULT_DESIGN_MOVE_STEP_MM: f32 = 0.1;
@@ -62,7 +65,7 @@ pub struct Seance {
     print_device: PrintDevice,
 
     /// The currently open design file, if any.
-    design_file: Arc<RwLock<Option<DesignFile>>>,
+    design_file: Arc<RwLock<Option<DesignWithMeta>>>,
     /// The message channel that will receive UI events.
     ui_message_tx: UIMessageTx,
     /// The message channel that UI events will be sent into.
@@ -618,7 +621,7 @@ enum UIMessage {
     /// A new design file has been loaded.
     DesignFileChanged {
         /// The design file that has been loaded.
-        design_file: DesignFile,
+        design_file: DesignWithMeta,
     },
     /// The list of tool passes have changed.
     /// This is used when the tool passes are imported, for example.
@@ -950,7 +953,7 @@ impl FileDialog {
 /// An [`egui::Response`].
 fn toolbar_widget(
     ui: &mut egui::Ui,
-    design_file: &Arc<RwLock<Option<DesignFile>>>,
+    design_file: &Arc<RwLock<Option<(DesignFile, u64, PathBuf)>>>,
     tool_passes: &Vec<ToolPass>,
     print_device: &PrintDevice,
     offset: &Vec2,
@@ -986,7 +989,7 @@ fn toolbar_widget(
                     if ui.add_enabled(print_device.is_valid(), button).on_hover_text(hover_text).clicked() {
                         if let Ok(design_lock) = design_file.read() {
                             if let Some(file) = &*design_lock {
-                                if let Err(err) = cut_file(file, tool_passes, print_device, offset) {
+                                if let Err(err) = cut_file(&file.0, tool_passes, print_device, (offset.x, offset.y)) {
                                     handle_cut_file_error(err, ui_message_tx);
                                 }
                             }
@@ -1005,7 +1008,7 @@ fn toolbar_widget(
 fn handle_cut_file_error(err: SendToDeviceError, ui_message_tx: &UIMessageTx) {
     log::error!("Error cutting design: {err:?}");
     let (error, details) = match err {
-        crate::SendToDeviceError::ErrorParsingSvg(error) => {
+        SendToDeviceError::ErrorParsingSvg(error) => {
             let details = match error {
                 usvg::Error::NotAnUtf8Str => "File is not UTF-8 encoded".to_string(),
                 usvg::Error::MalformedGZip => "Malformed GZip".to_string(),
@@ -1022,11 +1025,11 @@ fn handle_cut_file_error(err: SendToDeviceError, ui_message_tx: &UIMessageTx) {
                 format!("Error from SVG parsing library: {details}"),
             )
         }
-        crate::SendToDeviceError::FailedToOpenPrinter(err) => (
+        SendToDeviceError::FailedToOpenPrinter(err) => (
             "Error opening printer".to_string(),
             format!("I/O error: {err:?}"),
         ),
-        crate::SendToDeviceError::FailedToWriteToPrinter(err) => (
+        SendToDeviceError::FailedToWriteToPrinter(err) => (
             "Error writing to printer".to_string(),
             format!("I/O error: {err:?}"),
         ),
@@ -1054,7 +1057,7 @@ fn ui_main(
     tool_passes: &mut Vec<ToolPass>,
     tool_pass_widget_states: &mut Vec<ToolPassWidgetState>,
     frame_widgets: &mut HashMap<egui::Id, SeanceUIElement>,
-    design_file: &Arc<RwLock<Option<DesignFile>>>,
+    design_file: &Arc<RwLock<Option<DesignWithMeta>>>,
     design_preview_image: &mut Option<DesignPreview>,
     preview_zoom_level: f32,
     design_move_step_mm: f32,
@@ -1523,7 +1526,7 @@ fn tool_pass_widget(
 /// An [`egui::Response`].
 fn design_file_widget(
     ui: &mut egui::Ui,
-    design_file: &Arc<RwLock<Option<DesignFile>>>,
+    design_file: &Arc<RwLock<Option<DesignWithMeta>>>,
     design_preview: &mut Option<DesignPreview>,
     ui_message_tx: &UIMessageTx,
     size: egui::Vec2,
@@ -1806,7 +1809,10 @@ fn settings_dialog(
 ///
 /// # Returns
 /// The design file, if successfully loaded, otherwise an error string.
-fn load_design(path: &PathBuf, hasher: &mut Box<dyn hash::Hasher>) -> Result<DesignFile, String> {
+fn load_design(
+    path: &PathBuf,
+    hasher: &mut Box<dyn hash::Hasher>,
+) -> Result<DesignWithMeta, String> {
     let mut path_without_extension = path.clone();
     path_without_extension.set_extension("");
 
@@ -1842,14 +1848,16 @@ fn load_design(path: &PathBuf, hasher: &mut Box<dyn hash::Hasher>) -> Result<Des
             bytes.hash(hasher);
             let hash = hasher.finish();
 
-            Ok(DesignFile {
-                name: file_name.to_string(),
-                path: path.to_owned(),
+            Ok((
+                DesignFile {
+                    name: file_name.to_string(),
+                    tree: svg,
+                    width_mm: width,
+                    height_mm: height,
+                },
                 hash,
-                tree: svg,
-                width_mm: width,
-                height_mm: height,
-            })
+                path.clone(),
+            ))
         }
         Err(err) => Err(format!("Failed to read file: {}", err)),
     }
@@ -1923,5 +1931,62 @@ fn focus_changing(
                 }
             }
         });
+    }
+}
+
+/// Gets all of the possible capitalisations of a string.
+/// We need this because the library we use for showig file dialogs is not very clever,
+/// it does not match against file extensions case-insensitively. Therefore, we provide
+/// the file dialog library with all of the possible capitalisations of the file extensions
+/// we care about, just in case folks have bizarrely capitalised file extensions.
+///
+/// # Arguments
+/// * `input`: The string to generate all the capitalisations of.
+///
+/// # Returns
+/// An array of strings containing all of the possible capitalisations of the input string.
+pub fn all_capitalisations_of(input: &str) -> Vec<String> {
+    let mut result = vec![];
+
+    let bitmask = ((2_u32.pow(input.len() as u32)) - 1) as usize;
+
+    for mask in 0..=bitmask {
+        let mut new_str = String::new();
+        for i in 0..input.len() {
+            if mask & (1 << i) > 0 {
+                new_str += &input
+                    .chars()
+                    .nth(i)
+                    .expect(&format!("Could not get character {i}"))
+                    .to_uppercase()
+                    .to_string();
+            } else {
+                new_str += &input
+                    .chars()
+                    .nth(i)
+                    .expect(&format!("Could not get character {i}"))
+                    .to_lowercase()
+                    .to_string();
+            }
+        }
+        result.push(new_str);
+    }
+
+    result
+}
+
+#[cfg(test)]
+mod test {
+    use super::all_capitalisations_of;
+
+    #[test]
+    fn capitalisations() {
+        let mut result = all_capitalisations_of("svg");
+        result.sort();
+        assert_eq!(result.len(), 8);
+        assert_eq!(
+            result,
+            vec!["SVG", "SVg", "SvG", "Svg", "sVG", "sVg", "svG", "svg"]
+        )
     }
 }

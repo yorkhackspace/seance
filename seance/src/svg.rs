@@ -7,7 +7,7 @@ use resvg::usvg;
 
 use crate::{paths::PathColour, SendToDeviceError};
 
-// The number of SVG units per mm. This is based on 96 SVG units per inch.
+/// The number of SVG units per mm. This is based on 96 SVG units per inch.
 pub const SVG_UNITS_PER_MM: f32 = 3.779527559;
 
 /// Parses an SVG file and turns it into a tree of paths.
