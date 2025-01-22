@@ -150,6 +150,7 @@
       let
         overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs { inherit system overlays; };
+        rustToolchain = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
 
         nativeBuildInputs = with pkgs; [
           pkg-config
@@ -158,6 +159,8 @@
           # cargo-tauri
           (callPackage ./cargo-tauri.nix { })
           nodejs
+
+          rustToolchain
         ];
         buildInputs = with pkgs; [
           at-spi2-atk
@@ -180,6 +183,7 @@
           inherit buildInputs nativeBuildInputs;
 
           LD_LIBRARY_PATH="${builtins.toString (pkgs.lib.makeLibraryPath buildInputs)}:$LD_LIBRARY_PATH";
+          RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
         };
       });
 }
