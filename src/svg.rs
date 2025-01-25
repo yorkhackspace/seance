@@ -56,14 +56,23 @@ pub fn parse_svg(path: &PathBuf, bytes: &[u8]) -> Result<usvg::Tree, usvg::Error
 ///
 /// # Returns
 /// The paths grouped by colour if successful, otherwise an error.
-pub fn get_paths_grouped_by_colour(
-    svg: &usvg::Tree,
-) -> Result<HashMap<PathColour, Vec<Box<usvg::Path>>>, SendToDeviceError> {
+pub fn get_paths_grouped_by_colour(svg: &usvg::Tree) -> Result<GroupedPaths, SendToDeviceError> {
     let mut grouped_paths = HashMap::new();
     group_paths_by_colour(svg.root(), &mut grouped_paths);
 
     Ok(grouped_paths)
 }
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct GroupId(String);
+
+impl Into<GroupId> for String {
+    fn into(self) -> GroupId {
+        GroupId(self)
+    }
+}
+
+pub type GroupedPaths = HashMap<PathColour, HashMap<GroupId, Vec<Box<usvg::Path>>>>;
 
 /// Does the actual grouping of paths by colour.
 /// Be warned, here be recursion.
@@ -72,10 +81,7 @@ pub fn get_paths_grouped_by_colour(
 /// # Arguments
 /// * `group`: The SVG group to search through for paths. May contain nested groups.
 /// * `grouped_paths`: The path grouping to extend with any new paths found.
-fn group_paths_by_colour(
-    group: &usvg::Group,
-    grouped_paths: &mut HashMap<PathColour, Vec<Box<usvg::Path>>>,
-) {
+fn group_paths_by_colour(group: &usvg::Group, grouped_paths: &mut GroupedPaths) {
     'iter_children: for child in group.children() {
         match child {
             usvg::Node::Group(child_group) => group_paths_by_colour(child_group, grouped_paths),
@@ -86,10 +92,13 @@ fn group_paths_by_colour(
                     }
 
                     if let usvg::Paint::Color(colour) = stroke.paint() {
-                        let entry = grouped_paths
+                        let colour_entry = grouped_paths
                             .entry(PathColour([colour.red, colour.green, colour.blue]))
                             .or_default();
-                        entry.push(path.clone());
+                        let group_entry = colour_entry
+                            .entry(group.id().to_string().into())
+                            .or_default();
+                        group_entry.push(path.clone());
                     }
                 }
             }

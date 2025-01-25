@@ -20,7 +20,7 @@ pub fn generate_hpgl(
     // In, Default Coordinate System, Pen Up, Select Pen 1, Reset scaling points to default positions.
     // TODO: Select first pen, not always Pen 1.
     let var_name = format!(
-        "IN;SC;PU;SP1;LT;PU{},{};",
+        "IN;SC;PU;SP1;LT;PU{},{};AU360;AS4,4;",
         mm_to_hpgl_units(0.0, true),
         mm_to_hpgl_units(0.0, false)
     );
@@ -86,10 +86,18 @@ fn trace_path(path: &ResolvedPath) -> String {
         hpgl.push_str(&format!("PU{x},{y};"))
     }
 
+    hpgl.push_str("PD;");
+
+    // if let Some(first) = path.first() {
+    //     let x = first.x;
+    //     let y = first.y;
+    //     hpgl.push_str(&format!("PD{x},{y};"));
+    // }
+
     for point in path {
         let x = point.x;
         let y = point.y;
-        hpgl.push_str(&format!("PD{x},{y};"));
+        hpgl.push_str(&format!("PA{x},{y};"));
     }
 
     hpgl

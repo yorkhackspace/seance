@@ -11,8 +11,8 @@ use lyon_algorithms::path::math::Point;
 use lyon_algorithms::path::PathSlice;
 use lyon_algorithms::walk::{walk_along_path, RegularPattern, WalkerEvent};
 use resvg::usvg;
-use usvg::Path;
 
+use crate::svg::GroupedPaths;
 use crate::{ToolPass, BED_HEIGHT_MM};
 
 /// The number of mm that are moved per unit that the plotter is instructed to move.
@@ -46,7 +46,7 @@ pub struct PathColour(pub [u8; 3]);
 /// # Returns
 /// A set of resolved paths, grouped by path colour.
 pub fn resolve_paths(
-    paths_grouped_by_colour: &HashMap<PathColour, Vec<Box<Path>>>,
+    paths_grouped_by_colour: &GroupedPaths,
     tool_passes: &[ToolPass; 16],
     offset: &Vec2,
 ) -> HashMap<PathColour, Vec<ResolvedPath>> {
@@ -54,73 +54,78 @@ pub fn resolve_paths(
 
     for pass in tool_passes {
         let path_colour = PathColour(pass.colour().to_owned());
-        if let Some(paths) = paths_grouped_by_colour.get(&path_colour) {
-            for path in paths {
+        if let Some(groups) = paths_grouped_by_colour.get(&path_colour) {
+            for (_, paths) in groups {
                 let mut path_builder = lyon_algorithms::path::Path::builder();
                 let mut closed = false;
-                for segment in path.data().segments() {
-                    match segment {
-                        usvg::tiny_skia_path::PathSegment::MoveTo(point) => {
-                            path_builder.begin(
-                                PointInMillimeters {
-                                    x: point.x,
-                                    y: point.y,
-                                }
-                                .into(),
-                            );
-                        }
-                        usvg::tiny_skia_path::PathSegment::LineTo(point) => {
-                            path_builder.line_to(
-                                PointInMillimeters {
-                                    x: point.x,
-                                    y: point.y,
-                                }
-                                .into(),
-                            );
-                        }
-                        // The target point is the end of the curve, the control point is somewhere in the middle.
-                        usvg::tiny_skia_path::PathSegment::QuadTo(control_point, target_point) => {
-                            path_builder.quadratic_bezier_to(
-                                PointInMillimeters {
-                                    x: control_point.x,
-                                    y: control_point.y,
-                                }
-                                .into(),
-                                PointInMillimeters {
-                                    x: target_point.x,
-                                    y: target_point.y,
-                                }
-                                .into(),
-                            );
-                        }
-                        // The target point is the end of the curve, the first control point is towards the beginning
-                        // of the curve, the second control point is towards the end of the curve.
-                        usvg::tiny_skia_path::PathSegment::CubicTo(
-                            first_control_point,
-                            second_control_point,
-                            target_point,
-                        ) => {
-                            path_builder.cubic_bezier_to(
-                                PointInMillimeters {
-                                    x: first_control_point.x,
-                                    y: first_control_point.y,
-                                }
-                                .into(),
-                                PointInMillimeters {
-                                    x: second_control_point.x,
-                                    y: second_control_point.y,
-                                }
-                                .into(),
-                                PointInMillimeters {
-                                    x: target_point.x,
-                                    y: target_point.y,
-                                }
-                                .into(),
-                            );
-                        }
-                        usvg::tiny_skia_path::PathSegment::Close => {
-                            path_builder.end(true);
-                            closed = true;
+                for path in paths {
+                    for segment in path.data().segments() {
+                        match segment {
+                            usvg::tiny_skia_path::PathSegment::MoveTo(point) => {
+                                path_builder.begin(
+                                    PointInMillimeters {
+                                        x: point.x,
+                                        y: point.y,
+                                    }
+                                    .into(),
+                                );
+                            }
+                            usvg::tiny_skia_path::PathSegment::LineTo(point) => {
+                                path_builder.line_to(
+                                    PointInMillimeters {
+                                        x: point.x,
+                                        y: point.y,
+                                    }
+                                    .into(),
+                                );
+                            }
+                            // The target point is the end of the curve, the control point is somewhere in the middle.
+                            usvg::tiny_skia_path::PathSegment::QuadTo(
+                                control_point,
+                                target_point,
+                            ) => {
+                                path_builder.quadratic_bezier_to(
+                                    PointInMillimeters {
+                                        x: control_point.x,
+                                        y: control_point.y,
+                                    }
+                                    .into(),
+                                    PointInMillimeters {
+                                        x: target_point.x,
+                                        y: target_point.y,
+                                    }
+                                    .into(),
+                                );
+                            }
+                            // The target point is the end of the curve, the first control point is towards the beginning
+                            // of the curve, the second control point is towards the end of the curve.
+                            usvg::tiny_skia_path::PathSegment::CubicTo(
+                                first_control_point,
+                                second_control_point,
+                                target_point,
+                            ) => {
+                                path_builder.cubic_bezier_to(
+                                    PointInMillimeters {
+                                        x: first_control_point.x,
+                                        y: first_control_point.y,
+                                    }
+                                    .into(),
+                                    PointInMillimeters {
+                                        x: second_control_point.x,
+                                        y: second_control_point.y,
+                                    }
+                                    .into(),
+                                    PointInMillimeters {
+                                        x: target_point.x,
+                                        y: target_point.y,
+                                    }
+                                    .into(),
+                                );
+                            }
+                            usvg::tiny_skia_path::PathSegment::Close => {
+                                path_builder.end(true);
+                                closed = true;
+                            }
                         }
                     }
                 }
