@@ -22,14 +22,13 @@ pub fn generate_hpgl(
         .enumerate()
         .find(|(_, pass)| *pass.enabled())
     else {
-        return "".to_string();
+        return "No tool passes enabled".to_string();
     };
 
-    // In, Default Coordinate System, Pen Up, Select Pen 1, Reset scaling points to default positions.
-    // TODO: Select first pen, not always Pen 1.
+    // In, Default Coordinate System, Pen Up, Select first pen, reset line type, move to 0,0.
     let var_name = format!(
-        "IN;SC;PU;SP{};LT;PU{},{};",
-        first_pen + 1,
+        "IN;SC;PU;{}LT;PU{},{};",
+        pen_change(first_pen),
         mm_to_hpgl_units(0.0, true),
         mm_to_hpgl_units(0.0, false)
     );
@@ -49,8 +48,7 @@ pub fn generate_hpgl(
     }
 
     hpgl.push_str(&format!(
-        "PU{},{};SP{};EC0;EC1;OE;",
-        first_pen + 1,
+        "PU{},{};SP0;EC0;EC1;OE;",
         mm_to_hpgl_units(0.0, true),
         mm_to_hpgl_units(0.0, false)
     ));
