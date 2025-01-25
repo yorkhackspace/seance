@@ -135,7 +135,9 @@ pub fn resolve_paths(
                 let mut points = vec![];
                 points_along_path(built_path.as_slice(), &mut points);
                 if closed {
-                    points.push(*points.get(0).unwrap());
+                    if let Some(first_point) = points.get(0) {
+                        points.push(*first_point);
+                    }
                 }
                 for mut point in points {
                     offset_point(&mut point, offset);
