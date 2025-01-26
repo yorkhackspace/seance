@@ -17,6 +17,10 @@ pub fn generate_hpgl(
     resolved_paths: &HashMap<PathColour, Vec<ResolvedPath>>,
     tool_passes: &Vec<ToolPass>,
 ) -> String {
+    if tool_passes.len() != 16 {
+        return "Exactly 16 tool passes are required".to_string();
+    }
+
     let Some((first_pen, _)) = tool_passes
         .iter()
         .enumerate()
