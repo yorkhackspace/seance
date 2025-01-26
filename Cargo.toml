@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = [ "app","seance"]
-default-members = ["seance"]
+default-members = ["app"]
 
 [workspace.package]
 edition = "2021"
