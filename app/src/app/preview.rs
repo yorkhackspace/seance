@@ -9,19 +9,22 @@ use std::{
 
 use egui::{ColorImage, ImageData, TextureHandle, TextureOptions};
 use oneshot::TryRecvError;
-use resvg::{tiny_skia::Color, usvg};
 
-use seance::{DesignFile, BED_HEIGHT_MM, BED_WIDTH_MM};
+use seance::{
+    resolve_paths, svg::get_paths_grouped_by_colour, DesignFile, BED_HEIGHT_MM, BED_WIDTH_MM,
+};
 
 use super::DesignWithMeta;
 
 /// The maximum that we can zoom into the design preview.
 pub const MAX_ZOOM_LEVEL: f32 = 5.0;
 /// The minimum zoom level for the design preview.
-pub const MIN_ZOOM_LEVEL: f32 = 1.05;
+pub const MIN_ZOOM_LEVEL: f32 = 1.0;
 
 /// The background colour for the design preview.
 const PREVIEW_BACKGROUND_COLOUR: [u8; 4] = [230, 230, 230, 255];
+/// How thick to draw lines for the design preview, in pixels.
+const PREVIEW_LINE_THICKNESS_PIXELS: usize = 4;
 
 /// The cache for the design preview.
 pub struct DesignPreview {
@@ -191,8 +194,11 @@ impl DesignPreview {
             return None;
         };
 
-        let zoomed_bounding_box_width = self.size.x * self.zoom;
-        let zoomed_bounding_box_height = self.size.y * self.zoom;
+        // If we ever actually zoom to 1x then the scrollbars disappear from the UI.
+        // When we then zoom in, the bars flash back into existence in a very nasty
+        // way. Therefore, we never allow the zoom level to actually return to 1.0
+        let zoomed_bounding_box_width = self.size.x * (self.zoom * 1.05);
+        let zoomed_bounding_box_height = self.size.y * (self.zoom * 1.05);
 
         let texture_width = zoomed_bounding_box_width.floor();
         let texture_height = zoomed_bounding_box_height.floor();
@@ -253,7 +259,7 @@ pub type RenderRequestCallback = oneshot::Sender<RenderedImage>;
 pub fn render_task(render_request: Arc<Mutex<Option<RenderRequest>>>) {
     let mut texture_buffer: Vec<u8> = vec![];
     let mut previous_design_hash: Option<u64> = None;
-    let mut design_texture: Option<resvg::tiny_skia::Pixmap> = None;
+    let mut previous_size: Option<egui::Vec2> = None;
 
     loop {
         let request = {
@@ -274,11 +280,11 @@ pub fn render_task(render_request: Arc<Mutex<Option<RenderRequest>>>) {
         {
             render_inner(
                 size,
+                &mut previous_size,
                 &design_offset_mm,
                 &design_file,
                 &mut texture_buffer,
                 &mut previous_design_hash,
-                &mut design_texture,
                 callback,
             );
         }
@@ -290,23 +296,21 @@ pub fn render_task(render_request: Arc<Mutex<Option<RenderRequest>>>) {
 
 /// Does the actual rendering of the design preview.
 ///
-/// TODO: Really we should hand off to the GPU.
-///
 /// # Arguments
 /// * `size`: The size to draw the preview at.
+/// * `previous_size`: The previous size we drew the preview at, we will re-draw if the size has changed.
 /// * `offset_mm`: The offset of the design from the top-left corner, in mm.
 /// * `design_file`: The design file to render.
 /// * `texture_buffer`: This is the texture that is actually shown to the user.
 /// * `previous_design_hash`: The previous hash of the design file.
-/// * `design_texture`: The texture to render an SVG design into.
 /// * `callback`: Callback into which the rendered image will be sent.
 fn render_inner(
     size: egui::Vec2,
+    previous_size: &mut Option<egui::Vec2>,
     offset_mm: &egui::Vec2,
     design_file: &Arc<RwLock<Option<DesignWithMeta>>>,
     texture_buffer: &mut Vec<u8>,
     previous_design_hash: &mut Option<u64>,
-    design_texture: &mut Option<resvg::tiny_skia::Pixmap>,
     callback: RenderRequestCallback,
 ) {
     // Calculate how big the texture should be.
@@ -314,63 +318,6 @@ fn render_inner(
     let zoomed_bounding_box_height = size.y * MAX_ZOOM_LEVEL;
     let texture_width = zoomed_bounding_box_width.floor() as u32;
     let texture_height = zoomed_bounding_box_height.floor() as u32;
-
-    // Resize texture buffer to fill the bounds.
-    resize_texture_buffer(
-        texture_buffer,
-        texture_width as usize,
-        texture_height as usize,
-    );
-
-    let Ok(design_lock) = design_file.read() else {
-        log::error!("Failed to lock design file for render");
-        return;
-    };
-    let design = &*design_lock;
-
-    // If we have a design file then we need to check if the hash has changed, if so then we need to re-render the design.
-    if let Some((
-        DesignFile {
-            name: _,
-            tree,
-            width_mm,
-            height_mm,
-        },
-        hash,
-        _,
-    )) = &design
-    {
-        if Some(*hash) != *previous_design_hash {
-            *previous_design_hash = Some(*hash);
-
-            // Work out the proportion of the bed taken up by the design, then scale the image by this proportion and the zoom level.
-            let width = (width_mm / BED_WIDTH_MM) * size.x * MAX_ZOOM_LEVEL;
-            let height = (height_mm / BED_HEIGHT_MM) * size.y * MAX_ZOOM_LEVEL;
-
-            // Create a pixmap to render to that is the scaled width and height of the design.
-            let Some(mut pixmap) =
-                resvg::tiny_skia::Pixmap::new((width).ceil() as u32, (height).ceil() as u32)
-            else {
-                log::error!("Could not create pixmap for rendering design preview");
-                invalidate_design_texture(previous_design_hash, design_texture);
-                return;
-            };
-
-            // Fill the pixmap with the background colour.
-            pixmap.fill(Color::from_rgba8(
-                PREVIEW_BACKGROUND_COLOUR[0],
-                PREVIEW_BACKGROUND_COLOUR[1],
-                PREVIEW_BACKGROUND_COLOUR[2],
-                PREVIEW_BACKGROUND_COLOUR[3],
-            ));
-            // Render the design at the origin of the pixmap.
-            let transform = usvg::Transform::default();
-            resvg::render(&tree, transform, &mut pixmap.as_mut());
-            *design_texture = Some(pixmap);
-        }
-    } else {
-        invalidate_design_texture(previous_design_hash, design_texture);
-    }
 
     // Work out how many pixels correspond to 1mm in each dimension.
     let pixels_per_mm_x = zoomed_bounding_box_width / BED_WIDTH_MM;
@@ -380,48 +327,90 @@ fn render_inner(
     let pixels_per_10_mm_x = pixels_per_mm_x * 10.0;
     let pixels_per_10_mm_y = pixels_per_mm_y * 10.0;
 
+    let Ok(design_lock) = design_file.read() else {
+        log::error!("Failed to lock design file for render");
+        return;
+    };
+    let design = &*design_lock;
+
+    if Some(size) == *previous_size
+        && design.as_ref().map(|(_, hash, _)| hash) == previous_design_hash.as_ref()
+    {
+        // Nothing has changed, nothing to do.
+        return;
+    }
+
+    // Resize texture buffer to fill the bounds.
+    *previous_size = Some(size);
+    resize_texture_buffer(
+        texture_buffer,
+        texture_width as usize,
+        texture_height as usize,
+    );
+
     for (index, pixel) in texture_buffer.chunks_exact_mut(4).enumerate() {
         // Get the x/y position of the pixel.
         let x = index % texture_width as usize;
         let y = index / texture_width as usize;
 
-        // Store whether we have written to the pixel so that we know whether to fill with the background colour later.
-        let mut written = false;
-        if let Some(design) = design_texture {
-            // Clamp the width and height of the design so that it is not larger than the available size.
-            let width = design.width().min(texture_width) as usize;
-            let height = design.height().min(texture_height) as usize;
-            let x = (index % texture_width as usize).saturating_sub(offset_mm.x.floor() as usize);
-            let y = (index / texture_width as usize).saturating_sub(offset_mm.y.floor() as usize);
-            if x > 0 && y > 0 && x < width && y < height {
-                // The starting index for this pixel in the design texture.
-                let design_texture_pixel_start = ((y * width) + x) * 4;
-                pixel.copy_from_slice(
-                    &design.data()[design_texture_pixel_start..design_texture_pixel_start + 4],
-                );
-                written = true;
+        // Work out where along the bed we are, in 10mm increments.
+        let bed_width_fraction = (x as f32) / pixels_per_10_mm_x;
+        let bed_height_fraction = (y as f32) / pixels_per_10_mm_y;
+
+        // We want just the fractional component so that...
+        let proportion_x = bed_height_fraction.fract();
+        let proportion_y = bed_width_fraction.fract();
+
+        // Anything that is -0.9 to +0.1 away from the nearest 10mm gets coloured in a different colour, so that the user sees markers for each 10mm increment.
+        if (proportion_x <= 0.1 || proportion_x >= 0.9)
+            && (proportion_y <= 0.1 || proportion_y >= 0.9)
+        {
+            pixel.copy_from_slice(&[100, 100, 100, 255]);
+        } else {
+            pixel.copy_from_slice(&PREVIEW_BACKGROUND_COLOUR);
+        }
+    }
+
+    // If we have a design file then we need to check if the hash has changed, if so then we need to re-render the design.
+    if let Some((DesignFile { tree, .. }, hash, _)) = &design {
+        *previous_design_hash = Some(*hash);
+
+        let grouped_paths = get_paths_grouped_by_colour(tree).unwrap();
+        let resolved_paths = resolve_paths(&grouped_paths, (offset_mm.x, offset_mm.y), 0.1);
+
+        for (path_colour, paths) in resolved_paths {
+            for path in paths {
+                for point in path {
+                    let pixel_x = (point.x * pixels_per_mm_x).ceil() as usize;
+                    let pixel_y = (point.y * pixels_per_mm_x).ceil() as usize;
+
+                    // Draw either side of the line
+                    for x in (pixel_x - (PREVIEW_LINE_THICKNESS_PIXELS / 2))
+                        ..(pixel_x + (PREVIEW_LINE_THICKNESS_PIXELS / 2))
+                    {
+                        for y in (pixel_y - (PREVIEW_LINE_THICKNESS_PIXELS / 2))
+                            ..(pixel_y + (PREVIEW_LINE_THICKNESS_PIXELS / 2))
+                        {
+                            if pixel_x == x || pixel_y == y {
+                                if let Some(pixel) = texture_buffer
+                                    .chunks_mut(4)
+                                    .nth((y * texture_width as usize) + x)
+                                {
+                                    pixel.copy_from_slice(&[
+                                        path_colour.0[0],
+                                        path_colour.0[1],
+                                        path_colour.0[2],
+                                        255,
+                                    ]);
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
-
-        // For pixels that have not had a design texture written to them, we fill with a background.
-        if !written {
-            // Work out where along the bed we are, in 10mm increments.
-            let bed_width_fraction = (x as f32) / pixels_per_10_mm_x;
-            let bed_height_fraction = (y as f32) / pixels_per_10_mm_y;
-
-            // We want just the fractional component so that...
-            let proportion_x = bed_height_fraction.fract();
-            let proportion_y = bed_width_fraction.fract();
-
-            // Anything that is -0.9 to +0.1 away from the nearest 10mm gets coloured in a different colour, so that the user sees markers for each 10mm increment.
-            if (proportion_x <= 0.1 || proportion_x >= 0.9)
-                && (proportion_y <= 0.1 || proportion_y >= 0.9)
-            {
-                pixel.copy_from_slice(&[100, 100, 100, 255]);
-            } else {
-                pixel.copy_from_slice(&PREVIEW_BACKGROUND_COLOUR);
-            }
-        }
+    } else {
+        invalidate_design_texture(previous_design_hash);
     }
 
     let ci = ColorImage::from_rgba_unmultiplied(
@@ -452,11 +441,6 @@ fn resize_texture_buffer(buffer: &mut Vec<u8>, width: usize, height: usize) {
 ///
 /// # Arguments
 /// * `design_hash`: The hash of the design.
-/// * `design_texture`: The pixmap used to render SVGs.
-fn invalidate_design_texture(
-    design_hash: &mut Option<u64>,
-    design_texture: &mut Option<resvg::tiny_skia::Pixmap>,
-) {
+fn invalidate_design_texture(design_hash: &mut Option<u64>) {
     *design_hash = None;
-    *design_texture = None;
 }

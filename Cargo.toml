@@ -26,3 +26,6 @@ opt-level = 2
 # Optimize all dependencies even in debug builds:
 [profile.dev.package."*"]
 opt-level = 2
+
+[workspace.dependencies]
+usvg = "0.45.0"

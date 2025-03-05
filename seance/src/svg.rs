@@ -3,7 +3,7 @@
 //! Provides utilities for handling SVG data.
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-use resvg::usvg;
+use usvg;
 
 use crate::{paths::PathColour, SendToDeviceError};
 
@@ -44,6 +44,7 @@ pub fn parse_svg(path: &PathBuf, bytes: &[u8]) -> Result<usvg::Tree, usvg::Error
         image_href_resolver: usvg::ImageHrefResolver::default(),
         font_resolver: usvg::FontResolver::default(),
         fontdb: Arc::new(fontdb),
+        style_sheet: None,
     };
 
     usvg::Tree::from_data(bytes, &re_opt)

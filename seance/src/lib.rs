@@ -17,10 +17,11 @@ use std::{
 
 use hpgl::generate_hpgl;
 pub use laser_passes::ToolPass;
-use paths::resolve_paths;
+pub use paths::resolve_paths;
+use paths::{convert_points_to_plotter_units, filter_paths_to_tool_passes};
 use pcl::wrap_hpgl_in_pcl;
-use resvg::usvg;
 use svg::get_paths_grouped_by_colour;
+use usvg;
 
 type Vec2 = (f32, f32);
 
@@ -209,7 +210,9 @@ pub fn cut_file(
     let design_name = design_file.name();
 
     let paths = get_paths_grouped_by_colour(&design_file.tree)?;
-    let resolved_paths = resolve_paths(&paths, &tool_passes, offset);
+    let mut paths_in_mm = resolve_paths(&paths, offset, 1.0);
+    filter_paths_to_tool_passes(&mut paths_in_mm, tool_passes);
+    let resolved_paths = convert_points_to_plotter_units(&paths_in_mm);
     let hpgl = generate_hpgl(&resolved_paths, &tool_passes);
     let pcl = wrap_hpgl_in_pcl(hpgl, &design_name, &tool_passes);
     print_device.print(&pcl)?;

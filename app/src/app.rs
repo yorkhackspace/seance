@@ -4,7 +4,6 @@
 
 mod preview;
 pub use preview::{render_task, RenderRequest};
-use resvg::usvg;
 
 use std::{
     collections::HashMap,
@@ -1008,23 +1007,10 @@ fn toolbar_widget(
 fn handle_cut_file_error(err: SendToDeviceError, ui_message_tx: &UIMessageTx) {
     log::error!("Error cutting design: {err:?}");
     let (error, details) = match err {
-        SendToDeviceError::ErrorParsingSvg(error) => {
-            let details = match error {
-                usvg::Error::NotAnUtf8Str => "File is not UTF-8 encoded".to_string(),
-                usvg::Error::MalformedGZip => "Malformed GZip".to_string(),
-                usvg::Error::ElementsLimitReached => {
-                    "Reached the limit of number of elements that can be processed".to_string()
-                }
-                usvg::Error::InvalidSize => "Design is an invalid size".to_string(),
-                usvg::Error::ParsingFailed(error) => {
-                    format!("Failed to parse the design file: {error:?}")
-                }
-            };
-            (
-                "Error processing design".to_string(),
-                format!("Error from SVG parsing library: {details}"),
-            )
-        }
+        SendToDeviceError::ErrorParsingSvg(error) => (
+            "Error processing design".to_string(),
+            format!("Error from SVG parsing library: {error}"),
+        ),
         SendToDeviceError::FailedToOpenPrinter(err) => (
             "Error opening printer".to_string(),
             format!("I/O error: {err:?}"),
