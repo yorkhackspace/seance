@@ -65,8 +65,7 @@ pub struct Seance {
 
     /// The currently open design file, if any.
     design_file: Arc<RwLock<Option<DesignWithMeta>>>,
-    /// The message channel that will receive UI events.
-    ui_message_tx: UIMessageTx,
+
     /// The message channel that UI events will be sent into.
     ui_message_rx: UIMessageRx,
     /// Where to put requests to re-render the design preview.
@@ -76,11 +75,10 @@ pub struct Seance {
     /// Amount to move the design by when moving.
     design_move_step_mm: f32,
 
+    /// Context passed around for drawing.
+    ui_context: UIContext,
     /// The states of all of the tool pass widgets.
     tool_pass_widget_states: Vec<ToolPassWidgetState>,
-    /// The widgets that were created on the previous frame, used for
-    /// handling tab/arrow-key/enter-key events.
-    previous_frame_widgets: HashMap<egui::Id, SeanceUIElement>,
     /// The zoom level of the design preview.
     preview_zoom_level: f32,
 
@@ -95,6 +93,71 @@ pub struct Seance {
     design_preview_image: Option<DesignPreview>,
     /// The settings dialog, if it is currently open.
     settings_dialog: Option<SettingsDialogState>,
+}
+
+/// Context that we're drawing into.
+///
+/// Use the methods implemented on this struct so that The Right Thing happens,
+/// don't modify the values in this struct directly!
+struct UIContext {
+    /// The message channel that will receive UI events.
+    ui_message_tx: UIMessageTx,
+    /// The widgets that were created on the previous frame, used for
+    /// handling tab/arrow-key/enter-key events.
+    previous_frame_widgets: HashMap<egui::Id, SeanceUIElement>,
+}
+
+impl UIContext {
+    /// Create a new [`UIContext`].
+    ///
+    /// # Arguments
+    /// * `ui_message_tx`: Message channel for sending UI events.
+    ///
+    /// # Returns
+    /// A new [`UIContext`].
+    fn new(ui_message_tx: UIMessageTx) -> Self {
+        Self {
+            ui_message_tx,
+            previous_frame_widgets: Default::default(),
+        }
+    }
+
+    /// Reset this context before painting the next frame.
+    /// Should be called after handling events and just before sarting to render a new frame.
+    fn prepare_for_repaint(&mut self) {
+        self.previous_frame_widgets = HashMap::default();
+    }
+
+    /// Send a [`UIMessage`].
+    ///
+    /// # Arguments
+    /// * `ctx`: egui context.
+    /// * `message`: The message to send.
+    fn send_ui_message(&mut self, ctx: &egui::Context, message: UIMessage) {
+        let _ = self.ui_message_tx.send(message);
+        ctx.request_repaint();
+    }
+
+    /// Add a widget to the stored widgets for this frame.
+    /// Should be called when creating widgets that are interacted with for text entry.
+    ///
+    /// # Arguments
+    /// * `id`: The Id of the widget.
+    /// * `element`: The element that was created.
+    fn add_widget(&mut self, id: egui::Id, element: SeanceUIElement) {
+        self.previous_frame_widgets.insert(id, element);
+    }
+
+    /// Get a widget that was created during this frame.
+    ///
+    /// # Arguments
+    /// * `id`: The Id of the widget to retrieve.
+    ///
+    /// # Returns
+    /// A reference to the stored [`SeanceUIElement`], if an element with the specified Id exists.
+    fn get_widget(&self, id: &egui::Id) -> Option<&SeanceUIElement> {
+        self.previous_frame_widgets.get(id)
+    }
 }
 
 /// The state of the settings dialog. Data here is ephemiral and must explicitly be saved when required.
@@ -165,14 +228,13 @@ impl Seance {
                 print_device: seance_storage.print_device,
 
                 design_file: Default::default(),
-                ui_message_tx,
                 ui_message_rx,
                 render_request,
                 hasher: Box::new(DefaultHasher::new()),
                 design_move_step_mm: seance_storage.design_move_step_mm,
 
+                ui_context: UIContext::new(ui_message_tx),
                 tool_pass_widget_states: laser_pass_widget_states,
-                previous_frame_widgets: Default::default(),
                 preview_zoom_level: MIN_ZOOM_LEVEL,
                 file_dialog: None,
                 current_error: None,
@@ -192,14 +254,14 @@ impl Seance {
             print_device: PrintDevice::default(),
 
             design_file: Default::default(),
-            ui_message_tx,
             ui_message_rx,
             render_request,
             hasher: Box::new(DefaultHasher::new()),
             design_move_step_mm: DEFAULT_DESIGN_MOVE_STEP_MM,
 
+            ui_context: UIContext::new(ui_message_tx),
             tool_pass_widget_states: laser_passes_widget_states,
-            previous_frame_widgets: Default::default(),
+
             preview_zoom_level: MIN_ZOOM_LEVEL,
             file_dialog: None,
             current_error: None,
@@ -242,7 +304,7 @@ impl Seance {
                 UIMessage::ShowExportToolPathSettingsDialog => {
                     let passes = self.passes.clone();
                     let (tx, rx) = oneshot::channel();
-                    let ui_message_tx = self.ui_message_tx.clone();
+                    let ui_message_tx = self.ui_context.ui_message_tx.clone();
                     let _ = std::thread::spawn(move || {
                         if let Some(mut path) = rfd::FileDialog::new()
                             .set_title("Export Laser Settings")
@@ -296,10 +358,13 @@ impl Seance {
                 }
                 UIMessage::DesignFileChanged { design_file } => {
                     let Ok(mut design_lock) = self.design_file.write() else {
-                        let _ = self.ui_message_tx.send(UIMessage::ShowError {
-                            error: "Could not store design file".to_string(),
-                            details: Some("Unable to write to design file store".to_string()),
-                        });
+                        let _ = self.ui_context.send_ui_message(
+                            ctx,
+                            UIMessage::ShowError {
+                                error: "Could not store design file".to_string(),
+                                details: Some("Unable to write to design file store".to_string()),
+                            },
+                        );
                         continue;
                     };
 
@@ -337,12 +402,7 @@ impl Seance {
                     }
                 }
                 UIMessage::ToolPassNameLostFocus => {
-                    focus_changing(
-                        ctx,
-                        &self.previous_frame_widgets,
-                        &mut self.tool_pass_widget_states,
-                        &self.ui_message_tx,
-                    );
+                    focus_changing(ctx, &mut self.ui_context, &mut self.tool_pass_widget_states);
                 }
                 UIMessage::ToolPassPowerClicked { index } => {
                     if let Some(pass) = self.tool_pass_widget_states.get_mut(index) {
@@ -350,12 +410,7 @@ impl Seance {
                     }
                 }
                 UIMessage::ToolPassPowerLostFocus => {
-                    focus_changing(
-                        ctx,
-                        &self.previous_frame_widgets,
-                        &mut self.tool_pass_widget_states,
-                        &self.ui_message_tx,
-                    );
+                    focus_changing(ctx, &mut self.ui_context, &mut self.tool_pass_widget_states);
                 }
                 UIMessage::ToolPassSpeedClicked { index } => {
                     if let Some(pass) = self.tool_pass_widget_states.get_mut(index) {
@@ -363,12 +418,7 @@ impl Seance {
                     }
                 }
                 UIMessage::ToolPassSpeedLostFocus => {
-                    focus_changing(
-                        ctx,
-                        &self.previous_frame_widgets,
-                        &mut self.tool_pass_widget_states,
-                        &self.ui_message_tx,
-                    );
+                    focus_changing(ctx, &mut self.ui_context, &mut self.tool_pass_widget_states);
                 }
                 UIMessage::ToolPassEnableChanged { index, enabled } => {
                     if let Some(pass) = self.passes.get_mut(index) {
@@ -410,28 +460,13 @@ impl Seance {
                     }
                 }
                 UIMessage::EnterKeyPressed => {
-                    focus_changing(
-                        ctx,
-                        &self.previous_frame_widgets,
-                        &mut self.tool_pass_widget_states,
-                        &self.ui_message_tx,
-                    );
+                    focus_changing(ctx, &mut self.ui_context, &mut self.tool_pass_widget_states);
                 }
                 UIMessage::TabKeyPressed => {
-                    focus_changing(
-                        ctx,
-                        &self.previous_frame_widgets,
-                        &mut self.tool_pass_widget_states,
-                        &self.ui_message_tx,
-                    );
+                    focus_changing(ctx, &mut self.ui_context, &mut self.tool_pass_widget_states);
                 }
                 UIMessage::SpaceKeyPressed => {
-                    focus_changing(
-                        ctx,
-                        &self.previous_frame_widgets,
-                        &mut self.tool_pass_widget_states,
-                        &self.ui_message_tx,
-                    );
+                    focus_changing(ctx, &mut self.ui_context, &mut self.tool_pass_widget_states);
                 }
             }
         }
@@ -455,19 +490,24 @@ impl eframe::App for Seance {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.handle_ui_messages(ctx);
 
-        if !FileDialog::poll(&self.file_dialog, &self.ui_message_tx, &mut self.hasher) {
+        if !FileDialog::poll(
+            ctx,
+            &mut self.ui_context,
+            &self.file_dialog,
+            &mut self.hasher,
+        ) {
             let _ = self.file_dialog.take();
         }
 
         if let Some((err, details)) = &self.current_error {
-            error_dialog(ctx, &self.ui_message_tx, err, details);
+            error_dialog(ctx, &mut self.ui_context, err, details);
         }
 
         if let Some(settings) = &self.settings_dialog {
-            settings_dialog(ctx, &self.ui_message_tx, settings);
+            settings_dialog(ctx, &mut self.ui_context, settings);
         }
 
-        self.previous_frame_widgets = Default::default();
+        self.ui_context.prepare_for_repaint();
 
         // Slow down key presses to make typing bearable.
         std::thread::sleep(Duration::from_millis(10));
@@ -479,7 +519,9 @@ impl eframe::App for Seance {
                 if !is_web {
                     ui.menu_button("File", |ui| {
                         if ui.button("Settings").clicked() {
-                            let _ = self.ui_message_tx.send(UIMessage::ShowSettingsDialog);
+                            let _ = self
+                                .ui_context
+                                .send_ui_message(ctx, UIMessage::ShowSettingsDialog);
                         }
 
                         if ui.button("Quit").clicked() {
@@ -513,6 +555,7 @@ impl eframe::App for Seance {
                             .show(ui, |ui| {
                                 toolbar_widget(
                                     ui,
+                                    &mut self.ui_context,
                                     &self.design_file,
                                     &self.passes,
                                     &self.print_device,
@@ -522,21 +565,19 @@ impl eframe::App for Seance {
                                         .map(|preview| preview.get_design_offset())
                                         .cloned()
                                         .unwrap_or_default(),
-                                    &self.ui_message_tx,
                                 );
                             });
                     });
                     strip.cell(|ui| {
                         ui_main(
                             ui,
+                            &mut self.ui_context,
                             &mut self.passes,
                             &mut self.tool_pass_widget_states,
-                            &mut self.previous_frame_widgets,
                             &self.design_file,
                             &mut self.design_preview_image,
                             self.preview_zoom_level,
                             self.design_move_step_mm,
-                            &self.ui_message_tx,
                         );
                     });
                 });
@@ -549,30 +590,40 @@ impl eframe::App for Seance {
                 if let Some(path) = &i.raw.dropped_files[0].path {
                     match load_design(path, &mut self.hasher) {
                         Ok(file) => {
-                            let _ = self
-                                .ui_message_tx
-                                .send(UIMessage::DesignFileChanged { design_file: file });
+                            let _ = self.ui_context.send_ui_message(
+                                ctx,
+                                UIMessage::DesignFileChanged { design_file: file },
+                            );
                         }
                         Err(err) => {
-                            let _ = self.ui_message_tx.send(UIMessage::ShowError {
-                                error: "Failed to load design".to_string(),
-                                details: Some(err),
-                            });
+                            let _ = self.ui_context.send_ui_message(
+                                ctx,
+                                UIMessage::ShowError {
+                                    error: "Failed to load design".to_string(),
+                                    details: Some(err),
+                                },
+                            );
                         }
                     }
                 }
             }
 
             if i.key_pressed(Key::Enter) {
-                let _ = self.ui_message_tx.send(UIMessage::EnterKeyPressed);
+                let _ = self
+                    .ui_context
+                    .send_ui_message(ctx, UIMessage::EnterKeyPressed);
             }
 
             if i.key_pressed(Key::Tab) {
-                let _ = self.ui_message_tx.send(UIMessage::TabKeyPressed);
+                let _ = self
+                    .ui_context
+                    .send_ui_message(ctx, UIMessage::TabKeyPressed);
             }
 
             if i.key_pressed(Key::Space) {
-                let _ = self.ui_message_tx.send(UIMessage::SpaceKeyPressed);
+                let _ = self
+                    .ui_context
+                    .send_ui_message(ctx, UIMessage::SpaceKeyPressed);
             }
         });
 
@@ -829,15 +880,17 @@ impl FileDialog {
     /// Poll the file dialog, to see whether a file has been selected or whether the dialog has been cancelled.
     ///
     /// # Arguments
+    /// * `ctx`: egui context.
+    /// * `ui_context`: The Seance UI context.
     /// * `dialog`: The file dialog to poll.
-    /// * `ui_message_tx`: The channel that messages will be sent into according to the interaction the user has with the file dialog.
     /// * `hasher`: Hasher that can be used to get the hash of files.
     ///
     /// # Returns
     /// Whether the file dialog should be kept (`true`) or destroyed (`false`).
     fn poll(
+        ctx: &egui::Context,
+        ui_context: &mut UIContext,
         dialog: &Option<FileDialog>,
-        ui_message_tx: &UIMessageTx,
         hasher: &mut Box<dyn hash::Hasher>,
     ) -> bool {
         let mut keep_dialog = true;
@@ -850,14 +903,19 @@ impl FileDialog {
                         if let Some(path) = path {
                             match load_design(&path, hasher) {
                                 Ok(file) => {
-                                    let _ = ui_message_tx
-                                        .send(UIMessage::DesignFileChanged { design_file: file });
+                                    let _ = ui_context.send_ui_message(
+                                        ctx,
+                                        UIMessage::DesignFileChanged { design_file: file },
+                                    );
                                 }
                                 Err(err) => {
-                                    let _ = ui_message_tx.send(UIMessage::ShowError {
-                                        error: "Failed to load design".to_string(),
-                                        details: Some(err),
-                                    });
+                                    let _ = ui_context.send_ui_message(
+                                        ctx,
+                                        UIMessage::ShowError {
+                                            error: "Failed to load design".to_string(),
+                                            details: Some(err),
+                                        },
+                                    );
                                 }
                             }
                         }
@@ -874,14 +932,19 @@ impl FileDialog {
                         if let Some(path) = path {
                             match Self::handle_open_tool_paths(&path) {
                                 Ok(passes) => {
-                                    let _ = ui_message_tx
-                                        .send(UIMessage::ToolPassesListChanged { passes });
+                                    let _ = ui_context.send_ui_message(
+                                        ctx,
+                                        UIMessage::ToolPassesListChanged { passes },
+                                    );
                                 }
                                 Err(err) => {
-                                    let _ = ui_message_tx.send(UIMessage::ShowError {
-                                        error: err,
-                                        details: None,
-                                    });
+                                    let _ = ui_context.send_ui_message(
+                                        ctx,
+                                        UIMessage::ShowError {
+                                            error: err,
+                                            details: None,
+                                        },
+                                    );
                                 }
                             }
                         }
@@ -942,21 +1005,21 @@ impl FileDialog {
 ///
 /// # Arguments
 /// * `ui`: The UI to draw the widget into.
+/// * `ui_context`: The Seance UI context.
 /// * `design_file`: The currently loaded design file, if any.
 /// * `tool_passes`: The current passes of the tool.
 /// * `print_device`: The device to use as our "printer".
 /// * `offset`: How much to move the design by relative to its starting position, in mm, where +x is more right and +y is more down.
-/// * `ui_message_tx`: Channel that can be used to send events.
 ///
 /// # Returns
 /// An [`egui::Response`].
 fn toolbar_widget(
     ui: &mut egui::Ui,
+    ui_context: &mut UIContext,
     design_file: &Arc<RwLock<Option<(DesignFile, u64, PathBuf)>>>,
     tool_passes: &Vec<ToolPass>,
     print_device: &PrintDevice,
     offset: &Vec2,
-    ui_message_tx: &UIMessageTx,
 ) -> egui::Response {
     StripBuilder::new(ui)
         .sizes(Size::remainder(), 2)
@@ -964,15 +1027,15 @@ fn toolbar_widget(
             strip.cell(|ui| {
                 ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
                     if ui.button("Open Design").clicked() {
-                        let _ = ui_message_tx.send(UIMessage::ShowOpenFileDialog);
+                        let _ = ui_context.send_ui_message(ui.ctx(), UIMessage::ShowOpenFileDialog);
                     }
 
                     if ui.button("Import Laser Settings").clicked() {
-                        let _ = ui_message_tx.send(UIMessage::ShowOpenToolPathSettingsDialog);
+                        let _ = ui_context.send_ui_message(ui.ctx(), UIMessage::ShowOpenToolPathSettingsDialog);
                     }
 
                     if ui.button("Export Laser Settings").clicked() {
-                        let _ = ui_message_tx.send(UIMessage::ShowExportToolPathSettingsDialog);
+                        let _ = ui_context.send_ui_message(ui.ctx(), UIMessage::ShowExportToolPathSettingsDialog);
                     }
                 });
             });
@@ -989,7 +1052,7 @@ fn toolbar_widget(
                         if let Ok(design_lock) = design_file.read() {
                             if let Some(file) = &*design_lock {
                                 if let Err(err) = cut_file(&file.0, tool_passes, print_device, (offset.x, offset.y)) {
-                                    handle_cut_file_error(err, ui_message_tx);
+                                    handle_cut_file_error(ui, ui_context, err);
                                 }
                             }
                         }
@@ -1002,9 +1065,10 @@ fn toolbar_widget(
 /// Handle an error produced when trying to cut a design file.
 ///
 /// # Arguments
+/// * `ui`: The UI to draw the widget into.
+/// * `ui_context`: The Seance UI context.
 /// * `err`: The error that was produced.
-/// * `ui_message_tx`: Channel into which UI events can be sent.
-fn handle_cut_file_error(err: SendToDeviceError, ui_message_tx: &UIMessageTx) {
+fn handle_cut_file_error(ui: &mut egui::Ui, ui_context: &mut UIContext, err: SendToDeviceError) {
     log::error!("Error cutting design: {err:?}");
     let (error, details) = match err {
         SendToDeviceError::ErrorParsingSvg(error) => (
@@ -1020,47 +1084,42 @@ fn handle_cut_file_error(err: SendToDeviceError, ui_message_tx: &UIMessageTx) {
             format!("I/O error: {err:?}"),
         ),
     };
-    let _ = ui_message_tx.send(UIMessage::ShowError {
-        error,
-        details: Some(details),
-    });
+    let _ = ui_context.send_ui_message(
+        ui.ctx(),
+        UIMessage::ShowError {
+            error,
+            details: Some(details),
+        },
+    );
 }
 
 /// Draws the main UI (tool paths and design preview).
 ///
 /// # Arguments
 /// * `ui`: The UI to draw the widget to.
+/// * `ui_context`: The Seance UI context.
 /// * `tool_passes`: The passes of the tool head.
 /// * `tool_pass_widget_states`: Current states of tool pass widgets.
-/// * `frame_widgets`: Map of widgets being drawn this frame.
 /// * `design_file`: The loaded design file, if any.
 /// * `design_preview_image`: The preview image to draw to the UI.
 /// * `preview_zoom_level`: How much the preview image is zoomed in.
 /// * `design_move_step_mm`: The current amount to step the design by when moving it.
-/// * `ui_message_tx`: Channel into which UI events can be sent.
 fn ui_main(
     ui: &mut egui::Ui,
+    ui_context: &mut UIContext,
     tool_passes: &mut Vec<ToolPass>,
     tool_pass_widget_states: &mut Vec<ToolPassWidgetState>,
-    frame_widgets: &mut HashMap<egui::Id, SeanceUIElement>,
     design_file: &Arc<RwLock<Option<DesignWithMeta>>>,
     design_preview_image: &mut Option<DesignPreview>,
     preview_zoom_level: f32,
     design_move_step_mm: f32,
-    ui_message_tx: &UIMessageTx,
 ) {
     StripBuilder::new(ui)
         .size(Size::relative(0.2).at_least(525.0))
         .size(Size::remainder())
         .horizontal(|mut strip| {
             strip.cell(|ui| {
-                tool_passes_widget(
-                    ui,
-                    tool_passes,
-                    tool_pass_widget_states,
-                    frame_widgets,
-                    ui_message_tx,
-                );
+                tool_passes_widget(ui, ui_context, tool_passes, tool_pass_widget_states);
             });
             strip.cell(|ui| {
                 let ratio = BED_HEIGHT_MM / BED_WIDTH_MM;
@@ -1081,9 +1140,9 @@ fn ui_main(
                             Frame::default().fill(Color32::LIGHT_GRAY).show(ui, |ui| {
                                 design_file_widget(
                                     ui,
+                                    ui_context,
                                     design_file,
                                     design_preview_image,
-                                    ui_message_tx,
                                     egui::Vec2 {
                                         x: width,
                                         y: height,
@@ -1098,10 +1157,10 @@ fn ui_main(
                                     Slider::new(&mut zoom_value, MIN_ZOOM_LEVEL..=MAX_ZOOM_LEVEL);
                                 ui.label("Zoom");
                                 if ui.add(zoom_widget).changed() {
-                                    let _ =
-                                        ui_message_tx.send(UIMessage::PreviewZoomLevelChanged {
-                                            zoom: zoom_value,
-                                        });
+                                    let _ = ui_context.send_ui_message(
+                                        ui.ctx(),
+                                        UIMessage::PreviewZoomLevelChanged { zoom: zoom_value },
+                                    );
                                 }
                             });
                             ui.separator();
@@ -1197,7 +1256,8 @@ fn ui_main(
                                                     .on_hover_text(tooltip)
                                                     .clicked()
                                                 {
-                                                    let _ = ui_message_tx.send(event);
+                                                    let _ =
+                                                        ui_context.send_ui_message(ui.ctx(), event);
                                                 }
                                             }
                                         });
@@ -1212,10 +1272,10 @@ fn ui_main(
                                     );
                                     ui.label("Step By (mm)");
                                     if ui.add(step_by_widget).changed() {
-                                        let _ =
-                                            ui_message_tx.send(UIMessage::DesignMoveStepChanged {
-                                                step: step_value,
-                                            });
+                                        let _ = ui_context.send_ui_message(
+                                            ui.ctx(),
+                                            UIMessage::DesignMoveStepChanged { step: step_value },
+                                        );
                                     }
                                 });
                             });
@@ -1229,16 +1289,14 @@ fn ui_main(
 ///
 /// # Arguments
 /// * `ui`: The UI to draw the widget into.
+/// * `ui_context`: The Seance UI context.
 /// * `tool_passes`: The tool passes to draw.
 /// * `tool_pass_widget_states`: The states of the tool pass widgets that we're drawing, should be persistent across frames.
-/// * `frame_widgets`: The map that created widgets should be added to.
-/// * `ui_message_tx`: A channel for sending UI messages into.
 fn tool_passes_widget(
     ui: &mut egui::Ui,
+    ui_context: &mut UIContext,
     tool_passes: &mut Vec<ToolPass>,
     tool_pass_widget_states: &mut Vec<ToolPassWidgetState>,
-    frame_widgets: &mut HashMap<egui::Id, SeanceUIElement>,
-    ui_message_tx: &UIMessageTx,
 ) {
     // List of laser passes.
     ScrollArea::vertical().show(ui, |ui| {
@@ -1267,11 +1325,10 @@ fn tool_passes_widget(
                             ui.child_ui(widget_rect, Layout::left_to_right(Align::Center), None);
                         tool_pass_widget(
                             &mut child_ui,
+                            ui_context,
                             pass,
                             state.index,
                             &mut tool_pass_widget_states[state.index], // TODO: BAD!
-                            frame_widgets,
-                            ui_message_tx,
                         );
                     });
                 });
@@ -1327,21 +1384,19 @@ enum ToolPassWidgetEditing {
 ///
 /// # Arguments
 /// * `ui`: The UI to draw the widget into.
+/// * `ui_context`: The Seance UI context.
 /// * `tool_pass`: The tool pass to draw.
 /// * `pass_index`: The index into the tool passes array that is being drawn.
 /// * `state`: The state of the widget.
-/// * `frame_widgets`: The map of widgets to add drawn widgets to.
-/// * `ui_message_tx`: The channel to send UI events into.
 ///
 /// # Returns
 /// An [`egui::Response`].
 fn tool_pass_widget(
     ui: &mut egui::Ui,
+    ui_context: &mut UIContext,
     tool_pass: &ToolPass,
     pass_index: usize,
     state: &mut ToolPassWidgetState,
-    frame_widgets: &mut HashMap<egui::Id, SeanceUIElement>,
-    ui_message_tx: &UIMessageTx,
 ) -> egui::Response {
     StripBuilder::new(ui)
         .size(Size::exact(30.0))
@@ -1358,14 +1413,7 @@ fn tool_pass_widget(
                 margin.left = 10.0;
                 margin.right = 10.0;
                 Frame::default().inner_margin(margin).show(ui, |ui| {
-                    tool_pass_details_widget(
-                        ui,
-                        tool_pass,
-                        pass_index,
-                        state,
-                        frame_widgets,
-                        ui_message_tx,
-                    );
+                    tool_pass_details_widget(ui, ui_context, tool_pass, pass_index, state);
                 });
             });
         })
@@ -1375,18 +1423,16 @@ fn tool_pass_widget(
 ///
 /// # Arguments
 /// * `ui`: The UI to draw to.
+/// * `ui_context`: The Seance UI context.
 /// * `tool_pass`: The pass to draw.
 /// * `pass_index`: The index of the tool pass.
 /// * `state`: The state of this tool pass widget.
-/// * `frame_widgets`: Map that we should insert widgets into as we create them.
-/// * `ui_message_tx`: Message channel that UI events can be sent into.
 fn tool_pass_details_widget(
     ui: &mut egui::Ui,
+    ui_context: &mut UIContext,
     tool_pass: &ToolPass,
     pass_index: usize,
     state: &mut ToolPassWidgetState,
-    frame_widgets: &mut HashMap<egui::Id, SeanceUIElement>,
-    ui_message_tx: &UIMessageTx,
 ) {
     StripBuilder::new(ui)
         .sizes(Size::remainder(), 2)
@@ -1396,27 +1442,23 @@ fn tool_pass_details_widget(
                     .sizes(Size::remainder(), 3)
                     .horizontal(|mut strip| {
                         strip.cell(|ui| {
-                            tool_pass_name_widget(
-                                ui,
-                                tool_pass,
-                                pass_index,
-                                state,
-                                frame_widgets,
-                                ui_message_tx,
-                            )
+                            tool_pass_name_widget(ui, ui_context, tool_pass, pass_index, state)
                         });
                         strip.cell(|ui| {
-                            tool_pass_colour_widget(ui, tool_pass, pass_index, ui_message_tx)
+                            tool_pass_colour_widget(ui, ui_context, tool_pass, pass_index)
                         });
                         strip.cell(|ui| {
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                                 let mut enabled_val = tool_pass.enabled().clone();
                                 let enable_box = ui.checkbox(&mut enabled_val, "");
                                 if enable_box.changed() {
-                                    let _ = ui_message_tx.send(UIMessage::ToolPassEnableChanged {
-                                        index: pass_index,
-                                        enabled: enabled_val.clone(),
-                                    });
+                                    let _ = ui_context.send_ui_message(
+                                        ui.ctx(),
+                                        UIMessage::ToolPassEnableChanged {
+                                            index: pass_index,
+                                            enabled: enabled_val.clone(),
+                                        },
+                                    );
                                 }
                                 ui.label("Enabled");
                             });
@@ -1427,24 +1469,10 @@ fn tool_pass_details_widget(
                 StripBuilder::new(ui)
                     .sizes(Size::remainder(), 2)
                     .horizontal(|mut strip| {
-                        strip.cell(|ui| {
-                            tool_pass_power_widget(
-                                ui,
-                                pass_index,
-                                state,
-                                frame_widgets,
-                                ui_message_tx,
-                            )
-                        });
+                        strip.cell(|ui| tool_pass_power_widget(ui, ui_context, pass_index, state));
                         strip.cell(|ui| {
                             ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                                tool_pass_speed_widget(
-                                    ui,
-                                    pass_index,
-                                    state,
-                                    frame_widgets,
-                                    ui_message_tx,
-                                )
+                                tool_pass_speed_widget(ui, ui_context, pass_index, state)
                             });
                         });
                     });
@@ -1456,18 +1484,16 @@ fn tool_pass_details_widget(
 ///
 /// # Arguments
 /// * `ui`: The UI to draw to.
+/// * `ui_context`: The Seance UI context.
 /// * `tool_pass`: The pass to draw.
 /// * `pass_index`: The index of the tool pass.
 /// * `state`: The state of this tool pass widget.
-/// * `frame_widgets`: Map that we should insert widgets into as we create them.
-/// * `ui_message_tx`: Message channel that UI events can be sent into.
 fn tool_pass_name_widget(
     ui: &mut egui::Ui,
+    ui_context: &mut UIContext,
     tool_pass: &ToolPass,
     pass_index: usize,
     state: &mut ToolPassWidgetState,
-    frame_widgets: &mut HashMap<egui::Id, SeanceUIElement>,
-    ui_message_tx: &UIMessageTx,
 ) {
     let mut pen_name = tool_pass.name().to_string();
     if matches!(state.editing, ToolPassWidgetEditing::Name) {
@@ -1481,15 +1507,17 @@ fn tool_pass_name_widget(
             .memory_mut(|memory| memory.request_focus(text_edit.id));
 
         if text_edit.changed() || text_edit.lost_focus() {
-            let _ = ui_message_tx.send(UIMessage::ToolPassNameChanged {
-                index: pass_index,
-                name: pen_name.to_string(),
-            });
+            let _ = ui_context.send_ui_message(
+                ui.ctx(),
+                UIMessage::ToolPassNameChanged {
+                    index: pass_index,
+                    name: pen_name.to_string(),
+                },
+            );
         }
 
         if text_edit.clicked_elsewhere() {
-            // TODO: Request repaint
-            let _ = ui_message_tx.send(UIMessage::ToolPassNameLostFocus);
+            let _ = ui_context.send_ui_message(ui.ctx(), UIMessage::ToolPassNameLostFocus);
         }
     } else {
         let text = WidgetText::from(pen_name).strong();
@@ -1497,13 +1525,16 @@ fn tool_pass_name_widget(
         let pen_name_widget = ui
             .add(pen_name_label)
             .on_hover_cursor(egui::CursorIcon::Text);
-        frame_widgets.insert(
+        ui_context.add_widget(
             pen_name_widget.id,
             SeanceUIElement::NameLabel { index: pass_index },
         );
 
         if pen_name_widget.clicked() {
-            let _ = ui_message_tx.send(UIMessage::ToolPassNameClicked { index: pass_index });
+            let _ = ui_context.send_ui_message(
+                ui.ctx(),
+                UIMessage::ToolPassNameClicked { index: pass_index },
+            );
         }
     }
 }
@@ -1512,14 +1543,14 @@ fn tool_pass_name_widget(
 ///
 /// # Arguments
 /// * `ui`: The UI to draw to.
+/// * `ui_context`: The Seance UI context.
 /// * `tool_pass`: The pass to draw.
 /// * `pass_index`: The index of the tool pass.
-/// * `ui_message_tx`: Message channel that UI events can be sent into.
 fn tool_pass_colour_widget(
     ui: &mut egui::Ui,
+    ui_context: &mut UIContext,
     tool_pass: &ToolPass,
     pass_index: usize,
-    ui_message_tx: &UIMessageTx,
 ) {
     StripBuilder::new(ui)
         .sizes(Size::remainder(), 2)
@@ -1536,10 +1567,13 @@ fn tool_pass_colour_widget(
             strip.cell(|ui| {
                 let mut colour = tool_pass.colour().clone();
                 if ui.color_edit_button_srgb(&mut colour).changed() {
-                    let _ = ui_message_tx.send(UIMessage::ToolPassColourChanged {
-                        index: pass_index,
-                        colour: colour.clone(),
-                    });
+                    let _ = ui_context.send_ui_message(
+                        ui.ctx(),
+                        UIMessage::ToolPassColourChanged {
+                            index: pass_index,
+                            colour: colour.clone(),
+                        },
+                    );
                 };
             });
         });
@@ -1549,16 +1583,14 @@ fn tool_pass_colour_widget(
 ///
 /// # Arguments
 /// * `ui`: The UI to draw to.
+/// * `ui_context`: The Seance UI context.
 /// * `pass_index`: The index of the tool pass.
 /// * `state`: The state of this tool pass widget.
-/// * `frame_widgets`: Map that we should insert widgets into as we create them.
-/// * `ui_message_tx`: Message channel that UI events can be sent into.
 fn tool_pass_power_widget(
     ui: &mut egui::Ui,
+    ui_context: &mut UIContext,
     pass_index: usize,
     state: &mut ToolPassWidgetState,
-    frame_widgets: &mut HashMap<egui::Id, SeanceUIElement>,
-    ui_message_tx: &UIMessageTx,
 ) {
     let pen_power_str = &mut state.power_editing_text;
     if matches!(state.editing, ToolPassWidgetEditing::Power) {
@@ -1572,20 +1604,23 @@ fn tool_pass_power_widget(
             .memory_mut(|memory| memory.request_focus(text_edit.id));
 
         if text_edit.clicked_elsewhere() {
-            let _ = ui_message_tx.send(UIMessage::ToolPassPowerLostFocus);
+            let _ = ui_context.send_ui_message(ui.ctx(), UIMessage::ToolPassPowerLostFocus);
         }
     } else {
         let pen_power_label = Label::new(format!("Power: {pen_power_str}")).sense(Sense::click());
         let pen_power_widget = ui
             .add(pen_power_label)
             .on_hover_cursor(egui::CursorIcon::Text);
-        frame_widgets.insert(
+        ui_context.add_widget(
             pen_power_widget.id,
             SeanceUIElement::PowerLabel { index: pass_index },
         );
 
         if pen_power_widget.clicked() {
-            let _ = ui_message_tx.send(UIMessage::ToolPassPowerClicked { index: pass_index });
+            let _ = ui_context.send_ui_message(
+                ui.ctx(),
+                UIMessage::ToolPassPowerClicked { index: pass_index },
+            );
         }
     }
 }
@@ -1594,16 +1629,14 @@ fn tool_pass_power_widget(
 ///
 /// # Arguments
 /// * `ui`: The UI to draw to.
+/// * `ui_context`: The Seance UI context.
 /// * `pass_index`: The index of the tool pass.
 /// * `state`: The state of this tool pass widget.
-/// * `frame_widgets`: Map that we should insert widgets into as we create them.
-/// * `ui_message_tx`: Message channel that UI events can be sent into.
 fn tool_pass_speed_widget(
     ui: &mut egui::Ui,
+    ui_context: &mut UIContext,
     pass_index: usize,
     state: &mut ToolPassWidgetState,
-    frame_widgets: &mut HashMap<egui::Id, SeanceUIElement>,
-    ui_message_tx: &UIMessageTx,
 ) {
     let mut margin = Margin::default();
     margin.right = 10.0;
@@ -1619,20 +1652,23 @@ fn tool_pass_speed_widget(
             .memory_mut(|memory| memory.request_focus(text_edit.id));
 
         if text_edit.clicked_elsewhere() {
-            let _ = ui_message_tx.send(UIMessage::ToolPassSpeedLostFocus);
+            let _ = ui_context.send_ui_message(ui.ctx(), UIMessage::ToolPassSpeedLostFocus);
         }
     } else {
         let pen_speed_label = Label::new(format!("Speed: {pen_speed_str}")).sense(Sense::click());
         let pen_speed_widget = ui
             .add(pen_speed_label)
             .on_hover_cursor(egui::CursorIcon::Text);
-        frame_widgets.insert(
+        ui_context.add_widget(
             pen_speed_widget.id,
             SeanceUIElement::SpeedLabel { index: pass_index },
         );
 
         if pen_speed_widget.clicked() {
-            let _ = ui_message_tx.send(UIMessage::ToolPassSpeedClicked { index: pass_index });
+            let _ = ui_context.send_ui_message(
+                ui.ctx(),
+                UIMessage::ToolPassSpeedClicked { index: pass_index },
+            );
         }
     }
 }
@@ -1641,23 +1677,26 @@ fn tool_pass_speed_widget(
 ///
 /// # Arguments
 /// * `ui`: The UI to draw the preview into.
+/// * `ui_context`: The Seance UI context.
 /// * `design_file`: The design file to draw.
 /// * `design_file_preview`: The generated preview.
-/// * `ui_message_tx`: A channel that UI events can be sent into.
 /// * `size`: How big to draw the preview.
 ///
 /// # Returns
 /// An [`egui::Response`].
 fn design_file_widget(
     ui: &mut egui::Ui,
+    ui_context: &mut UIContext,
     design_file: &Arc<RwLock<Option<DesignWithMeta>>>,
     design_preview: &mut Option<DesignPreview>,
-    ui_message_tx: &UIMessageTx,
     size: egui::Vec2,
 ) -> egui::Response {
-    let _ = ui_message_tx.send(UIMessage::DesignPreviewSize {
-        size_before_wrap: size,
-    });
+    let _ = ui_context.send_ui_message(
+        ui.ctx(),
+        UIMessage::DesignPreviewSize {
+            size_before_wrap: size,
+        },
+    );
 
     let (_, widget_rect) = ui.allocate_space(size);
     ui.painter()
@@ -1763,12 +1802,12 @@ fn preview_files_being_dropped(ui: &mut egui::Ui, rect: Rect) {
 ///
 /// # Arguments
 /// * `ctx`: The egui context.
-/// * `ui_message_tx`: The channel that events can be sent into.
+/// * `ui_context`: The Seance UI context.
 /// * `err`: The error to display.
 /// * `details`: Any details that can be shown along with the error message.
 fn error_dialog(
     ctx: &egui::Context,
-    ui_message_tx: &UIMessageTx,
+    ui_context: &mut UIContext,
     err: &str,
     details: &Option<String>,
 ) {
@@ -1788,7 +1827,6 @@ fn error_dialog(
             })
             .with_resizable(false),
         move |ctx, _| {
-            let ui_message_tx = ui_message_tx.clone();
             egui::CentralPanel::default().show(ctx, |ui| {
                 ui.label(err);
                 if let Some(details) = details {
@@ -1796,7 +1834,7 @@ fn error_dialog(
                 }
                 ui.with_layout(Layout::right_to_left(Align::BOTTOM), |ui| {
                     if ui.button("ok").clicked() {
-                        let _ = ui_message_tx.send(UIMessage::CloseErrorDialog);
+                        let _ = ui_context.send_ui_message(ctx, UIMessage::CloseErrorDialog);
                     }
                 });
             });
@@ -1806,7 +1844,7 @@ fn error_dialog(
                     || i.key_pressed(Key::Enter)
                 {
                     // Tell parent to close us.
-                    let _ = ui_message_tx.send(UIMessage::CloseErrorDialog);
+                    let _ = ui_context.send_ui_message(ctx, UIMessage::CloseErrorDialog);
                 }
             });
         },
@@ -1817,11 +1855,11 @@ fn error_dialog(
 ///
 /// # Arguments
 /// * `ctx`: The egui context.
-/// * `ui_message_tx`: A message channel that events can be sent into.
+/// * `ui_context`: The Seance UI context.
 /// * `settings`: The state of the settings dialog.
 fn settings_dialog(
     ctx: &egui::Context,
-    ui_message_tx: &UIMessageTx,
+    ui_context: &mut UIContext,
     settings: &SettingsDialogState,
 ) {
     let window_size = ctx.screen_rect().max;
@@ -1837,7 +1875,6 @@ fn settings_dialog(
             })
             .with_resizable(true),
         move |ctx, _| {
-            let ui_message_tx = ui_message_tx.clone();
             egui::CentralPanel::default().show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     let mut printer = settings.print_device.clone();
@@ -1849,8 +1886,10 @@ fn settings_dialog(
                                 .text_edit_singleline(path)
                                 .on_hover_text(r#"This is the device that will be used to print."#);
                             if printer_edit.changed() || printer_edit.lost_focus() {
-                                let _ = ui_message_tx
-                                    .send(UIMessage::PrinterSettingsChanged { printer });
+                                let _ = ui_context.send_ui_message(
+                                    ctx,
+                                    UIMessage::PrinterSettingsChanged { printer },
+                                );
                             }
                         }
                         #[cfg(target_os = "windows")]
@@ -1904,11 +1943,11 @@ fn settings_dialog(
 
                 ui.with_layout(Layout::right_to_left(Align::BOTTOM), |ui| {
                     if ui.button("Save and Close").clicked() {
-                        let _ = ui_message_tx.send(UIMessage::SaveSettings);
-                        let _ = ui_message_tx.send(UIMessage::CloseSettingsDialog);
+                        let _ = ui_context.send_ui_message(ctx, UIMessage::SaveSettings);
+                        let _ = ui_context.send_ui_message(ctx, UIMessage::CloseSettingsDialog);
                     }
                     if ui.button("Discard and Close").clicked() {
-                        let _ = ui_message_tx.send(UIMessage::CloseSettingsDialog);
+                        let _ = ui_context.send_ui_message(ctx, UIMessage::CloseSettingsDialog);
                     }
                 });
             });
@@ -1918,7 +1957,7 @@ fn settings_dialog(
                     || i.key_pressed(Key::Enter)
                 {
                     // Tell parent to close us.
-                    let _ = ui_message_tx.send(UIMessage::CloseSettingsDialog);
+                    let _ = ui_context.send_ui_message(ctx, UIMessage::CloseSettingsDialog);
                 }
             });
         },
@@ -1992,14 +2031,12 @@ fn load_design(
 ///
 /// # Arguments
 /// * `ctx`: The egui context.
-/// * `previous_frame_widgets`: The widgets that were drawn on the previous frame.
+/// * `ui_context`: The Seance UI context.
 /// * `tool_pass_widgets_states`: The states of all of the tool pass widgets.
-/// * `ui_message_tx`: A channel that can be used to send UI events.
 fn focus_changing(
     ctx: &egui::Context,
-    previous_frame_widgets: &HashMap<egui::Id, SeanceUIElement>,
+    ui_context: &mut UIContext,
     tool_pass_widget_states: &mut Vec<ToolPassWidgetState>,
-    ui_message_tx: &UIMessageTx,
 ) {
     let mut allow_move = true;
     for (index, pen_widget) in tool_pass_widget_states.iter_mut().enumerate() {
@@ -2008,7 +2045,8 @@ fn focus_changing(
             ToolPassWidgetEditing::Name => {}
             ToolPassWidgetEditing::Power => {
                 if let Ok(power) = pen_widget.power_editing_text.parse::<u64>() {
-                    let _ = ui_message_tx.send(UIMessage::ToolPassPowerChanged { index, power });
+                    let _ = ui_context
+                        .send_ui_message(ctx, UIMessage::ToolPassPowerChanged { index, power });
                 } else {
                     // TODO: Flash red
                     allow_move = false;
@@ -2017,7 +2055,8 @@ fn focus_changing(
             }
             ToolPassWidgetEditing::Speed => {
                 if let Ok(speed) = pen_widget.speed_editing_text.parse::<u64>() {
-                    let _ = ui_message_tx.send(UIMessage::ToolPassSpeedChanged { index, speed });
+                    let _ = ui_context
+                        .send_ui_message(ctx, UIMessage::ToolPassSpeedChanged { index, speed });
                 } else {
                     // TODO: Flash red
                     allow_move = false;
@@ -2034,7 +2073,7 @@ fn focus_changing(
     if allow_move {
         ctx.memory_mut(|memory| {
             if let Some(id) = memory.focused() {
-                if let Some(widget) = previous_frame_widgets.get(&id) {
+                if let Some(widget) = ui_context.get_widget(&id) {
                     match widget {
                         SeanceUIElement::NameLabel { index } => {
                             if let Some(pass) = tool_pass_widget_states.get_mut(*index) {
