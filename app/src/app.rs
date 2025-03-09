@@ -1151,138 +1151,153 @@ fn ui_main(
                             });
                         });
                         strip.cell(|ui| {
-                            ui.horizontal(|ui| {
-                                let mut zoom_value = preview_zoom_level;
-                                let zoom_widget =
-                                    Slider::new(&mut zoom_value, MIN_ZOOM_LEVEL..=MAX_ZOOM_LEVEL);
-                                ui.label("Zoom");
-                                if ui.add(zoom_widget).changed() {
-                                    let _ = ui_context.send_ui_message(
-                                        ui.ctx(),
-                                        UIMessage::PreviewZoomLevelChanged { zoom: zoom_value },
-                                    );
-                                }
-                            });
-                            ui.separator();
-                            ui.label("Position Design");
-                            ui.horizontal(|ui| {
-                                ui.vertical(|ui| {
-                                    const GRID_WIDTH: usize = 3;
-                                    const GRID_HEIGHT: usize = 3;
-                                    // Buttons to be displayed along with their tooltips and associated events.
-                                    let buttons: [(&str, &str, UIMessage);
-                                        GRID_WIDTH * GRID_HEIGHT] = [
-                                        (
-                                            "↖",
-                                            "Up and to the left",
-                                            UIMessage::MoveDesign {
-                                                direction: DesignMoveDirection::UpAndLeft,
-                                                step: design_move_step_mm,
-                                            },
-                                        ),
-                                        (
-                                            "↑",
-                                            "Up",
-                                            UIMessage::MoveDesign {
-                                                direction: DesignMoveDirection::Up,
-                                                step: design_move_step_mm,
-                                            },
-                                        ),
-                                        (
-                                            "↗",
-                                            "Up and to the right",
-                                            UIMessage::MoveDesign {
-                                                direction: DesignMoveDirection::UpAndRight,
-                                                step: design_move_step_mm,
-                                            },
-                                        ),
-                                        (
-                                            "←",
-                                            "Left",
-                                            UIMessage::MoveDesign {
-                                                direction: DesignMoveDirection::Left,
-                                                step: design_move_step_mm,
-                                            },
-                                        ),
-                                        ("⇱", "Reset to top-left", UIMessage::ResetDesignPosition),
-                                        (
-                                            "→",
-                                            "Right",
-                                            UIMessage::MoveDesign {
-                                                direction: DesignMoveDirection::Right,
-                                                step: design_move_step_mm,
-                                            },
-                                        ),
-                                        (
-                                            "↙",
-                                            "Down and to the left",
-                                            UIMessage::MoveDesign {
-                                                direction: DesignMoveDirection::DownAndLeft,
-                                                step: design_move_step_mm,
-                                            },
-                                        ),
-                                        (
-                                            "↓",
-                                            "Down",
-                                            UIMessage::MoveDesign {
-                                                direction: DesignMoveDirection::Down,
-                                                step: design_move_step_mm,
-                                            },
-                                        ),
-                                        (
-                                            "↘",
-                                            "Down and to the right",
-                                            UIMessage::MoveDesign {
-                                                direction: DesignMoveDirection::DownAndRight,
-                                                step: design_move_step_mm,
-                                            },
-                                        ),
-                                    ];
-
-                                    let mut buttons_iter = buttons.into_iter();
-
-                                    for _ in 0..GRID_HEIGHT {
-                                        ui.horizontal(|ui| {
-                                            for _ in 0..GRID_WIDTH {
-                                                let (button_text, tooltip, event) = buttons_iter
-                                                    .next()
-                                                    .expect("There must be a button");
-                                                if ui
-                                                    .button(RichText::new(button_text).text_style(
-                                                        egui::TextStyle::Name(
-                                                            "Movement Buttons".into(),
-                                                        ),
-                                                    ))
-                                                    .on_hover_text(tooltip)
-                                                    .clicked()
-                                                {
-                                                    let _ =
-                                                        ui_context.send_ui_message(ui.ctx(), event);
-                                                }
-                                            }
-                                        });
-                                    }
-                                });
-                                ui.vertical(|ui| {
-                                    let mut step_value = design_move_step_mm;
-                                    let step_by_widget = Slider::new(
-                                        &mut step_value,
-                                        MINIMUM_DEFAULT_DESIGN_MOVE_STEP_MM
-                                            ..=MAXIMUM_DESIGN_MOVE_STEP_MM,
-                                    );
-                                    ui.label("Step By (mm)");
-                                    if ui.add(step_by_widget).changed() {
-                                        let _ = ui_context.send_ui_message(
-                                            ui.ctx(),
-                                            UIMessage::DesignMoveStepChanged { step: step_value },
-                                        );
-                                    }
-                                });
-                            });
+                            design_preview_navigation(
+                                ui,
+                                ui_context,
+                                preview_zoom_level,
+                                design_move_step_mm,
+                            );
                         });
                     });
             });
         });
+}
+
+/// Draws the navigation panel for the design preview.
+///
+/// # Arguments
+/// * `ui`: The UI to draw the widget to.
+/// * `ui_context`: The Seance UI context.
+/// * `preview_zoom_level`: How much the preview image is zoomed in.
+/// * `design_move_step_mm`: The current amount to step the design by when moving it.
+fn design_preview_navigation(
+    ui: &mut egui::Ui,
+    ui_context: &mut UIContext,
+    preview_zoom_level: f32,
+    design_move_step_mm: f32,
+) {
+    ui.horizontal(|ui| {
+        let mut zoom_value = preview_zoom_level;
+        let zoom_widget = Slider::new(&mut zoom_value, MIN_ZOOM_LEVEL..=MAX_ZOOM_LEVEL);
+        ui.label("Zoom");
+        if ui.add(zoom_widget).changed() {
+            let _ = ui_context.send_ui_message(
+                ui.ctx(),
+                UIMessage::PreviewZoomLevelChanged { zoom: zoom_value },
+            );
+        }
+    });
+    ui.separator();
+    ui.label("Position Design");
+    ui.horizontal(|ui| {
+        ui.vertical(|ui| {
+            const GRID_WIDTH: usize = 3;
+            const GRID_HEIGHT: usize = 3;
+            // Buttons to be displayed along with their tooltips and associated events.
+            let buttons: [(&str, &str, UIMessage); GRID_WIDTH * GRID_HEIGHT] = [
+                (
+                    "↖",
+                    "Up and to the left",
+                    UIMessage::MoveDesign {
+                        direction: DesignMoveDirection::UpAndLeft,
+                        step: design_move_step_mm,
+                    },
+                ),
+                (
+                    "↑",
+                    "Up",
+                    UIMessage::MoveDesign {
+                        direction: DesignMoveDirection::Up,
+                        step: design_move_step_mm,
+                    },
+                ),
+                (
+                    "↗",
+                    "Up and to the right",
+                    UIMessage::MoveDesign {
+                        direction: DesignMoveDirection::UpAndRight,
+                        step: design_move_step_mm,
+                    },
+                ),
+                (
+                    "←",
+                    "Left",
+                    UIMessage::MoveDesign {
+                        direction: DesignMoveDirection::Left,
+                        step: design_move_step_mm,
+                    },
+                ),
+                ("⇱", "Reset to top-left", UIMessage::ResetDesignPosition),
+                (
+                    "→",
+                    "Right",
+                    UIMessage::MoveDesign {
+                        direction: DesignMoveDirection::Right,
+                        step: design_move_step_mm,
+                    },
+                ),
+                (
+                    "↙",
+                    "Down and to the left",
+                    UIMessage::MoveDesign {
+                        direction: DesignMoveDirection::DownAndLeft,
+                        step: design_move_step_mm,
+                    },
+                ),
+                (
+                    "↓",
+                    "Down",
+                    UIMessage::MoveDesign {
+                        direction: DesignMoveDirection::Down,
+                        step: design_move_step_mm,
+                    },
+                ),
+                (
+                    "↘",
+                    "Down and to the right",
+                    UIMessage::MoveDesign {
+                        direction: DesignMoveDirection::DownAndRight,
+                        step: design_move_step_mm,
+                    },
+                ),
+            ];
+
+            let mut buttons_iter = buttons.into_iter();
+
+            for _ in 0..GRID_HEIGHT {
+                ui.horizontal(|ui| {
+                    for _ in 0..GRID_WIDTH {
+                        let (button_text, tooltip, event) =
+                            buttons_iter.next().expect("There must be a button");
+                        if ui
+                            .button(
+                                RichText::new(button_text)
+                                    .text_style(egui::TextStyle::Name("Movement Buttons".into())),
+                            )
+                            .on_hover_text(tooltip)
+                            .clicked()
+                        {
+                            let _ = ui_context.send_ui_message(ui.ctx(), event);
+                        }
+                    }
+                });
+            }
+        });
+        ui.vertical(|ui| {
+            let mut step_value = design_move_step_mm;
+            let step_by_widget = Slider::new(
+                &mut step_value,
+                MINIMUM_DEFAULT_DESIGN_MOVE_STEP_MM..=MAXIMUM_DESIGN_MOVE_STEP_MM,
+            );
+            ui.label("Step By (mm)");
+            if ui.add(step_by_widget).changed() {
+                let _ = ui_context.send_ui_message(
+                    ui.ctx(),
+                    UIMessage::DesignMoveStepChanged { step: step_value },
+                );
+            }
+        });
+    });
 }
 
 /// Draws a widget for displaying/editing the tool passes.
