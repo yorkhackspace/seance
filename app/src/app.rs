@@ -1253,7 +1253,7 @@ fn tool_passes_widget(
                 ui.horizontal(|ui| {
                     handle.show_drag_cursor_on_hover(false).ui(ui, |ui| {
                         let mut widget_size = ui.available_size_before_wrap();
-                        widget_size.y = 40.0;
+                        widget_size.y = 60.0;
                         let (_, widget_rect) = ui.allocate_space(widget_size);
                         ui.painter()
                             .rect_filled(widget_rect, 2.0, ui.style().visuals.panel_fill);
@@ -1344,135 +1344,192 @@ fn tool_pass_widget(
     ui_message_tx: &UIMessageTx,
 ) -> egui::Response {
     StripBuilder::new(ui)
-        .size(Size::exact(20.0))
-        .sizes(Size::remainder(), 6)
+        .size(Size::exact(30.0))
+        .size(Size::remainder())
         .horizontal(|mut strip| {
             // Drag Handle
             strip.cell(|ui| {
-                Frame::default().inner_margin(2.0).show(ui, |ui| {
+                Frame::default().inner_margin(10.0).show(ui, |ui| {
                     ui.label("☰").on_hover_cursor(egui::CursorIcon::Grab);
                 });
             });
-            // ToolPass Name
             strip.cell(|ui| {
-                Frame::default().inner_margin(5.0).show(ui, |ui| {
-                    let mut pen_name = tool_pass.name().to_string();
-                    if matches!(state.editing, ToolPassWidgetEditing::Name) {
-                        let text_edit = ui.add(
-                            TextEdit::singleline(&mut pen_name)
-                                .horizontal_align(Align::RIGHT)
-                                .vertical_align(Align::Center),
-                        );
+                let mut margin = Margin::default();
+                margin.left = 10.0;
+                margin.right = 10.0;
+                Frame::default().inner_margin(margin).show(ui, |ui| {
+                    tool_pass_details_widget(
+                        ui,
+                        tool_pass,
+                        pass_index,
+                        state,
+                        frame_widgets,
+                        ui_message_tx,
+                    );
+                });
+            });
+        })
+}
 
-                        ui.ctx()
-                            .memory_mut(|memory| memory.request_focus(text_edit.id));
-
-                        if text_edit.changed() || text_edit.lost_focus() {
-                            let _ = ui_message_tx.send(UIMessage::ToolPassNameChanged {
-                                index: pass_index,
-                                name: pen_name.to_string(),
+/// Draws the editable details of a tool pass.
+///
+/// # Arguments
+/// * `ui`: The UI to draw to.
+/// * `tool_pass`: The pass to draw.
+/// * `pass_index`: The index of the tool pass.
+/// * `state`: The state of this tool pass widget.
+/// * `frame_widgets`: Map that we should insert widgets into as we create them.
+/// * `ui_message_tx`: Message channel that UI events can be sent into.
+fn tool_pass_details_widget(
+    ui: &mut egui::Ui,
+    tool_pass: &ToolPass,
+    pass_index: usize,
+    state: &mut ToolPassWidgetState,
+    frame_widgets: &mut HashMap<egui::Id, SeanceUIElement>,
+    ui_message_tx: &UIMessageTx,
+) {
+    StripBuilder::new(ui)
+        .sizes(Size::remainder(), 2)
+        .vertical(|mut strip| {
+            strip.cell(|ui| {
+                StripBuilder::new(ui)
+                    .sizes(Size::remainder(), 3)
+                    .horizontal(|mut strip| {
+                        strip.cell(|ui| {
+                            tool_pass_name_widget(
+                                ui,
+                                tool_pass,
+                                pass_index,
+                                state,
+                                frame_widgets,
+                                ui_message_tx,
+                            )
+                        });
+                        strip.cell(|ui| {
+                            tool_pass_colour_widget(ui, tool_pass, pass_index, ui_message_tx)
+                        });
+                        strip.cell(|ui| {
+                            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                let mut enabled_val = tool_pass.enabled().clone();
+                                let enable_box = ui.checkbox(&mut enabled_val, "");
+                                if enable_box.changed() {
+                                    let _ = ui_message_tx.send(UIMessage::ToolPassEnableChanged {
+                                        index: pass_index,
+                                        enabled: enabled_val.clone(),
+                                    });
+                                }
+                                ui.label("Enabled");
                             });
-                        }
-
-                        if text_edit.lost_focus() {
-                            let _ = ui_message_tx.send(UIMessage::ToolPassNameLostFocus);
-                        }
-                    } else {
-                        let pen_name_label = Label::new(pen_name).truncate().sense(Sense::click());
-                        let pen_name_widget = ui
-                            .add(pen_name_label)
-                            .on_hover_cursor(egui::CursorIcon::Text);
-                        frame_widgets.insert(
-                            pen_name_widget.id,
-                            SeanceUIElement::NameLabel { index: pass_index },
-                        );
-
-                        if pen_name_widget.clicked() {
-                            let _ = ui_message_tx
-                                .send(UIMessage::ToolPassNameClicked { index: pass_index });
-                        }
-                    }
-                });
+                        });
+                    });
             });
-            // Power Field
             strip.cell(|ui| {
-                Frame::default().inner_margin(10.0).show(ui, |ui| {
-                    let pen_power_str = &mut state.power_editing_text;
-                    if matches!(state.editing, ToolPassWidgetEditing::Power) {
-                        let text_edit = ui.add(
-                            TextEdit::singleline(pen_power_str)
-                                .horizontal_align(Align::RIGHT)
-                                .vertical_align(Align::Center),
-                        );
-
-                        ui.ctx()
-                            .memory_mut(|memory| memory.request_focus(text_edit.id));
-
-                        if text_edit.clicked_elsewhere() {
-                            let _ = ui_message_tx.send(UIMessage::ToolPassPowerLostFocus);
-                        }
-                    } else {
-                        let pen_power_label =
-                            Label::new(format!("Power: {pen_power_str}")).sense(Sense::click());
-                        let pen_power_widget = ui
-                            .add(pen_power_label)
-                            .on_hover_cursor(egui::CursorIcon::Text);
-                        frame_widgets.insert(
-                            pen_power_widget.id,
-                            SeanceUIElement::PowerLabel { index: pass_index },
-                        );
-
-                        if pen_power_widget.clicked() {
-                            let _ = ui_message_tx
-                                .send(UIMessage::ToolPassPowerClicked { index: pass_index });
-                        }
-                    }
-                });
+                StripBuilder::new(ui)
+                    .sizes(Size::remainder(), 2)
+                    .horizontal(|mut strip| {
+                        strip.cell(|ui| {
+                            tool_pass_power_widget(
+                                ui,
+                                pass_index,
+                                state,
+                                frame_widgets,
+                                ui_message_tx,
+                            )
+                        });
+                        strip.cell(|ui| {
+                            ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                                tool_pass_speed_widget(
+                                    ui,
+                                    pass_index,
+                                    state,
+                                    frame_widgets,
+                                    ui_message_tx,
+                                )
+                            });
+                        });
+                    });
             });
-            // Speed Field
-            strip.cell(|ui| {
-                Frame::default().inner_margin(10.0).show(ui, |ui| {
-                    let pen_speed_str = &mut state.speed_editing_text;
-                    if matches!(state.editing, ToolPassWidgetEditing::Speed) {
-                        let text_edit = ui.add(
-                            TextEdit::singleline(pen_speed_str)
-                                .horizontal_align(Align::RIGHT)
-                                .vertical_align(Align::Center),
-                        );
+        });
+}
 
-                        ui.ctx()
-                            .memory_mut(|memory| memory.request_focus(text_edit.id));
+/// Draws the name of a tool pass.
+///
+/// # Arguments
+/// * `ui`: The UI to draw to.
+/// * `tool_pass`: The pass to draw.
+/// * `pass_index`: The index of the tool pass.
+/// * `state`: The state of this tool pass widget.
+/// * `frame_widgets`: Map that we should insert widgets into as we create them.
+/// * `ui_message_tx`: Message channel that UI events can be sent into.
+fn tool_pass_name_widget(
+    ui: &mut egui::Ui,
+    tool_pass: &ToolPass,
+    pass_index: usize,
+    state: &mut ToolPassWidgetState,
+    frame_widgets: &mut HashMap<egui::Id, SeanceUIElement>,
+    ui_message_tx: &UIMessageTx,
+) {
+    let mut pen_name = tool_pass.name().to_string();
+    if matches!(state.editing, ToolPassWidgetEditing::Name) {
+        let text_edit = ui.add(
+            TextEdit::singleline(&mut pen_name)
+                .horizontal_align(Align::RIGHT)
+                .vertical_align(Align::Center),
+        );
 
-                        if text_edit.clicked_elsewhere() {
-                            let _ = ui_message_tx.send(UIMessage::ToolPassSpeedLostFocus);
-                        }
-                    } else {
-                        let pen_speed_label =
-                            Label::new(format!("Speed: {pen_speed_str}")).sense(Sense::click());
-                        let pen_speed_widget = ui
-                            .add(pen_speed_label)
-                            .on_hover_cursor(egui::CursorIcon::Text);
-                        frame_widgets.insert(
-                            pen_speed_widget.id,
-                            SeanceUIElement::SpeedLabel { index: pass_index },
-                        );
+        ui.ctx()
+            .memory_mut(|memory| memory.request_focus(text_edit.id));
 
-                        if pen_speed_widget.clicked() {
-                            let _ = ui_message_tx
-                                .send(UIMessage::ToolPassSpeedClicked { index: pass_index });
-                        }
-                    }
-                });
+        if text_edit.changed() || text_edit.lost_focus() {
+            let _ = ui_message_tx.send(UIMessage::ToolPassNameChanged {
+                index: pass_index,
+                name: pen_name.to_string(),
             });
+        }
+
+        if text_edit.clicked_elsewhere() {
+            // TODO: Request repaint
+            let _ = ui_message_tx.send(UIMessage::ToolPassNameLostFocus);
+        }
+    } else {
+        let text = WidgetText::from(pen_name).strong();
+        let pen_name_label = Label::new(text).truncate().sense(Sense::click());
+        let pen_name_widget = ui
+            .add(pen_name_label)
+            .on_hover_cursor(egui::CursorIcon::Text);
+        frame_widgets.insert(
+            pen_name_widget.id,
+            SeanceUIElement::NameLabel { index: pass_index },
+        );
+
+        if pen_name_widget.clicked() {
+            let _ = ui_message_tx.send(UIMessage::ToolPassNameClicked { index: pass_index });
+        }
+    }
+}
+
+/// Draws the editable colour of a tool pass.
+///
+/// # Arguments
+/// * `ui`: The UI to draw to.
+/// * `tool_pass`: The pass to draw.
+/// * `pass_index`: The index of the tool pass.
+/// * `ui_message_tx`: Message channel that UI events can be sent into.
+fn tool_pass_colour_widget(
+    ui: &mut egui::Ui,
+    tool_pass: &ToolPass,
+    pass_index: usize,
+    ui_message_tx: &UIMessageTx,
+) {
+    StripBuilder::new(ui)
+        .sizes(Size::remainder(), 2)
+        .horizontal(|mut strip| {
             // Colour Hex-code
             strip.cell(|ui| {
-                Frame::default().inner_margin(6.0).show(ui, |ui| {
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        let [r, g, b] = tool_pass.colour();
-                        let colour_u32: u64 =
-                            ((*r as u64) << 16) + ((*g as u64) << 8) + (*b as u64);
-                        ui.label(format!("#{colour_u32:06X}"));
-                    });
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    let [r, g, b] = tool_pass.colour();
+                    let colour_u32: u64 = ((*r as u64) << 16) + ((*g as u64) << 8) + (*b as u64);
+                    ui.label(format!("#{colour_u32:06X}"));
                 });
             });
             // Colour Swatch
@@ -1485,18 +1542,99 @@ fn tool_pass_widget(
                     });
                 };
             });
-            // Enable Checkbox
-            strip.cell(|ui| {
-                let mut enabled_val = tool_pass.enabled().clone();
-                let enable_box = ui.checkbox(&mut enabled_val, "");
-                if enable_box.changed() {
-                    let _ = ui_message_tx.send(UIMessage::ToolPassEnableChanged {
-                        index: pass_index,
-                        enabled: enabled_val.clone(),
-                    });
-                }
-            });
-        })
+        });
+}
+
+/// Draws the editable power of a tool pass.
+///
+/// # Arguments
+/// * `ui`: The UI to draw to.
+/// * `pass_index`: The index of the tool pass.
+/// * `state`: The state of this tool pass widget.
+/// * `frame_widgets`: Map that we should insert widgets into as we create them.
+/// * `ui_message_tx`: Message channel that UI events can be sent into.
+fn tool_pass_power_widget(
+    ui: &mut egui::Ui,
+    pass_index: usize,
+    state: &mut ToolPassWidgetState,
+    frame_widgets: &mut HashMap<egui::Id, SeanceUIElement>,
+    ui_message_tx: &UIMessageTx,
+) {
+    let pen_power_str = &mut state.power_editing_text;
+    if matches!(state.editing, ToolPassWidgetEditing::Power) {
+        let text_edit = ui.add(
+            TextEdit::singleline(pen_power_str)
+                .horizontal_align(Align::RIGHT)
+                .vertical_align(Align::Center),
+        );
+
+        ui.ctx()
+            .memory_mut(|memory| memory.request_focus(text_edit.id));
+
+        if text_edit.clicked_elsewhere() {
+            let _ = ui_message_tx.send(UIMessage::ToolPassPowerLostFocus);
+        }
+    } else {
+        let pen_power_label = Label::new(format!("Power: {pen_power_str}")).sense(Sense::click());
+        let pen_power_widget = ui
+            .add(pen_power_label)
+            .on_hover_cursor(egui::CursorIcon::Text);
+        frame_widgets.insert(
+            pen_power_widget.id,
+            SeanceUIElement::PowerLabel { index: pass_index },
+        );
+
+        if pen_power_widget.clicked() {
+            let _ = ui_message_tx.send(UIMessage::ToolPassPowerClicked { index: pass_index });
+        }
+    }
+}
+
+/// Draws the editable speed of a tool pass.
+///
+/// # Arguments
+/// * `ui`: The UI to draw to.
+/// * `pass_index`: The index of the tool pass.
+/// * `state`: The state of this tool pass widget.
+/// * `frame_widgets`: Map that we should insert widgets into as we create them.
+/// * `ui_message_tx`: Message channel that UI events can be sent into.
+fn tool_pass_speed_widget(
+    ui: &mut egui::Ui,
+    pass_index: usize,
+    state: &mut ToolPassWidgetState,
+    frame_widgets: &mut HashMap<egui::Id, SeanceUIElement>,
+    ui_message_tx: &UIMessageTx,
+) {
+    let mut margin = Margin::default();
+    margin.right = 10.0;
+    let pen_speed_str = &mut state.speed_editing_text;
+    if matches!(state.editing, ToolPassWidgetEditing::Speed) {
+        let text_edit = ui.add(
+            TextEdit::singleline(pen_speed_str)
+                .horizontal_align(Align::RIGHT)
+                .vertical_align(Align::Center),
+        );
+
+        ui.ctx()
+            .memory_mut(|memory| memory.request_focus(text_edit.id));
+
+        if text_edit.clicked_elsewhere() {
+            let _ = ui_message_tx.send(UIMessage::ToolPassSpeedLostFocus);
+        }
+    } else {
+        let pen_speed_label = Label::new(format!("Speed: {pen_speed_str}")).sense(Sense::click());
+        let pen_speed_widget = ui
+            .add(pen_speed_label)
+            .on_hover_cursor(egui::CursorIcon::Text);
+        frame_widgets.insert(
+            pen_speed_widget.id,
+            SeanceUIElement::SpeedLabel { index: pass_index },
+        );
+
+        if pen_speed_widget.clicked() {
+            let _ = ui_message_tx.send(UIMessage::ToolPassSpeedClicked { index: pass_index });
+        }
+    }
 }
 
 /// A widget for drawing the preview of a design.
