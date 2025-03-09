@@ -2,15 +2,14 @@
 //!
 //! A utility for talking to devices that speak HPGL.
 
+// Hide console window on Windows in release
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 mod app;
 
 use app::Seance;
 use app::{render_task, RenderRequest};
 
-// When compiling natively:
-#[cfg(not(target_arch = "wasm32"))]
-// hide console window on Windows in release
-#[cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 fn main() -> eframe::Result {
     use std::sync::{Arc, Mutex};
 
