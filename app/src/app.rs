@@ -131,11 +131,9 @@ impl UIContext {
     /// Send a [`UIMessage`].
     ///
     /// # Arguments
-    /// * `ctx`: egui context.
     /// * `message`: The message to send.
-    fn send_ui_message(&mut self, ctx: &egui::Context, message: UIMessage) {
+    fn send_ui_message(&mut self, message: UIMessage) {
         let _ = self.ui_message_tx.send(message);
-        ctx.request_repaint();
     }
 
     /// Add a widget to the stored widgets for this frame.
@@ -358,13 +356,10 @@ impl Seance {
                 }
                 UIMessage::DesignFileChanged { design_file } => {
                     let Ok(mut design_lock) = self.design_file.write() else {
-                        let _ = self.ui_context.send_ui_message(
-                            ctx,
-                            UIMessage::ShowError {
-                                error: "Could not store design file".to_string(),
-                                details: Some("Unable to write to design file store".to_string()),
-                            },
-                        );
+                        let _ = self.ui_context.send_ui_message(UIMessage::ShowError {
+                            error: "Could not store design file".to_string(),
+                            details: Some("Unable to write to design file store".to_string()),
+                        });
                         continue;
                     };
 
@@ -490,12 +485,7 @@ impl eframe::App for Seance {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.handle_ui_messages(ctx);
 
-        if !FileDialog::poll(
-            ctx,
-            &mut self.ui_context,
-            &self.file_dialog,
-            &mut self.hasher,
-        ) {
+        if !FileDialog::poll(&mut self.ui_context, &self.file_dialog, &mut self.hasher) {
             let _ = self.file_dialog.take();
         }
 
@@ -521,7 +511,7 @@ impl eframe::App for Seance {
                         if ui.button("Settings").clicked() {
                             let _ = self
                                 .ui_context
-                                .send_ui_message(ctx, UIMessage::ShowSettingsDialog);
+                                .send_ui_message(UIMessage::ShowSettingsDialog);
                         }
 
                         if ui.button("Quit").clicked() {
@@ -590,50 +580,36 @@ impl eframe::App for Seance {
                 if let Some(path) = &i.raw.dropped_files[0].path {
                     match load_design(path, &mut self.hasher) {
                         Ok(file) => {
-                            let _ = self.ui_context.send_ui_message(
-                                ctx,
-                                UIMessage::DesignFileChanged { design_file: file },
-                            );
+                            let _ = self
+                                .ui_context
+                                .send_ui_message(UIMessage::DesignFileChanged {
+                                    design_file: file,
+                                });
                         }
                         Err(err) => {
-                            let _ = self.ui_context.send_ui_message(
-                                ctx,
-                                UIMessage::ShowError {
-                                    error: "Failed to load design".to_string(),
-                                    details: Some(err),
-                                },
-                            );
+                            let _ = self.ui_context.send_ui_message(UIMessage::ShowError {
+                                error: "Failed to load design".to_string(),
+                                details: Some(err),
+                            });
                         }
                     }
                 }
             }
 
             if i.key_pressed(Key::Enter) {
-                let _ = self
-                    .ui_context
-                    .send_ui_message(ctx, UIMessage::EnterKeyPressed);
+                let _ = self.ui_context.send_ui_message(UIMessage::EnterKeyPressed);
             }
 
             if i.key_pressed(Key::Tab) {
-                let _ = self
-                    .ui_context
-                    .send_ui_message(ctx, UIMessage::TabKeyPressed);
+                let _ = self.ui_context.send_ui_message(UIMessage::TabKeyPressed);
             }
 
             if i.key_pressed(Key::Space) {
-                let _ = self
-                    .ui_context
-                    .send_ui_message(ctx, UIMessage::SpaceKeyPressed);
+                let _ = self.ui_context.send_ui_message(UIMessage::SpaceKeyPressed);
             }
         });
 
-        // We need to redraw the UI until the design preview has finished rendering,
-        // otherwise the user may be left very frustrated that it is taking a while to render.
-        if let Some(preview) = &self.design_preview_image {
-            if preview.is_rendering() {
-                ctx.request_repaint();
-            }
-        }
+        ctx.request_repaint_after(Duration::from_millis(20));
     }
 }
 
@@ -880,7 +856,6 @@ impl FileDialog {
     /// Poll the file dialog, to see whether a file has been selected or whether the dialog has been cancelled.
     ///
     /// # Arguments
-    /// * `ctx`: egui context.
     /// * `ui_context`: The Seance UI context.
     /// * `dialog`: The file dialog to poll.
     /// * `hasher`: Hasher that can be used to get the hash of files.
@@ -888,7 +863,6 @@ impl FileDialog {
     /// # Returns
     /// Whether the file dialog should be kept (`true`) or destroyed (`false`).
     fn poll(
-        ctx: &egui::Context,
         ui_context: &mut UIContext,
         dialog: &Option<FileDialog>,
         hasher: &mut Box<dyn hash::Hasher>,
@@ -903,19 +877,16 @@ impl FileDialog {
                         if let Some(path) = path {
                             match load_design(&path, hasher) {
                                 Ok(file) => {
-                                    let _ = ui_context.send_ui_message(
-                                        ctx,
-                                        UIMessage::DesignFileChanged { design_file: file },
-                                    );
+                                    let _ =
+                                        ui_context.send_ui_message(UIMessage::DesignFileChanged {
+                                            design_file: file,
+                                        });
                                 }
                                 Err(err) => {
-                                    let _ = ui_context.send_ui_message(
-                                        ctx,
-                                        UIMessage::ShowError {
-                                            error: "Failed to load design".to_string(),
-                                            details: Some(err),
-                                        },
-                                    );
+                                    let _ = ui_context.send_ui_message(UIMessage::ShowError {
+                                        error: "Failed to load design".to_string(),
+                                        details: Some(err),
+                                    });
                                 }
                             }
                         }
@@ -933,18 +904,14 @@ impl FileDialog {
                             match Self::handle_open_tool_paths(&path) {
                                 Ok(passes) => {
                                     let _ = ui_context.send_ui_message(
-                                        ctx,
                                         UIMessage::ToolPassesListChanged { passes },
                                     );
                                 }
                                 Err(err) => {
-                                    let _ = ui_context.send_ui_message(
-                                        ctx,
-                                        UIMessage::ShowError {
-                                            error: err,
-                                            details: None,
-                                        },
-                                    );
+                                    let _ = ui_context.send_ui_message(UIMessage::ShowError {
+                                        error: err,
+                                        details: None,
+                                    });
                                 }
                             }
                         }
@@ -1027,15 +994,15 @@ fn toolbar_widget(
             strip.cell(|ui| {
                 ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
                     if ui.button("Open Design").clicked() {
-                        let _ = ui_context.send_ui_message(ui.ctx(), UIMessage::ShowOpenFileDialog);
+                        let _ = ui_context.send_ui_message(UIMessage::ShowOpenFileDialog);
                     }
 
                     if ui.button("Import Laser Settings").clicked() {
-                        let _ = ui_context.send_ui_message(ui.ctx(), UIMessage::ShowOpenToolPathSettingsDialog);
+                        let _ = ui_context.send_ui_message(UIMessage::ShowOpenToolPathSettingsDialog);
                     }
 
                     if ui.button("Export Laser Settings").clicked() {
-                        let _ = ui_context.send_ui_message(ui.ctx(), UIMessage::ShowExportToolPathSettingsDialog);
+                        let _ = ui_context.send_ui_message(UIMessage::ShowExportToolPathSettingsDialog);
                     }
                 });
             });
@@ -1052,7 +1019,7 @@ fn toolbar_widget(
                         if let Ok(design_lock) = design_file.read() {
                             if let Some(file) = &*design_lock {
                                 if let Err(err) = cut_file(&file.0, tool_passes, print_device, (offset.x, offset.y)) {
-                                    handle_cut_file_error(ui, ui_context, err);
+                                    handle_cut_file_error( ui_context, err);
                                 }
                             }
                         }
@@ -1065,10 +1032,9 @@ fn toolbar_widget(
 /// Handle an error produced when trying to cut a design file.
 ///
 /// # Arguments
-/// * `ui`: The UI to draw the widget into.
 /// * `ui_context`: The Seance UI context.
 /// * `err`: The error that was produced.
-fn handle_cut_file_error(ui: &mut egui::Ui, ui_context: &mut UIContext, err: SendToDeviceError) {
+fn handle_cut_file_error(ui_context: &mut UIContext, err: SendToDeviceError) {
     log::error!("Error cutting design: {err:?}");
     let (error, details) = match err {
         SendToDeviceError::ErrorParsingSvg(error) => (
@@ -1084,13 +1050,10 @@ fn handle_cut_file_error(ui: &mut egui::Ui, ui_context: &mut UIContext, err: Sen
             format!("I/O error: {err:?}"),
         ),
     };
-    let _ = ui_context.send_ui_message(
-        ui.ctx(),
-        UIMessage::ShowError {
-            error,
-            details: Some(details),
-        },
-    );
+    let _ = ui_context.send_ui_message(UIMessage::ShowError {
+        error,
+        details: Some(details),
+    });
 }
 
 /// Draws the main UI (tool paths and design preview).
@@ -1181,10 +1144,8 @@ fn design_preview_navigation(
         let zoom_widget = Slider::new(&mut zoom_value, MIN_ZOOM_LEVEL..=MAX_ZOOM_LEVEL);
         ui.label("Zoom");
         if ui.add(zoom_widget).changed() {
-            let _ = ui_context.send_ui_message(
-                ui.ctx(),
-                UIMessage::PreviewZoomLevelChanged { zoom: zoom_value },
-            );
+            let _ =
+                ui_context.send_ui_message(UIMessage::PreviewZoomLevelChanged { zoom: zoom_value });
         }
     });
     ui.separator();
@@ -1277,7 +1238,7 @@ fn design_preview_navigation(
                             .on_hover_text(tooltip)
                             .clicked()
                         {
-                            let _ = ui_context.send_ui_message(ui.ctx(), event);
+                            let _ = ui_context.send_ui_message(event);
                         }
                     }
                 });
@@ -1291,10 +1252,8 @@ fn design_preview_navigation(
             );
             ui.label("Step By (mm)");
             if ui.add(step_by_widget).changed() {
-                let _ = ui_context.send_ui_message(
-                    ui.ctx(),
-                    UIMessage::DesignMoveStepChanged { step: step_value },
-                );
+                let _ = ui_context
+                    .send_ui_message(UIMessage::DesignMoveStepChanged { step: step_value });
             }
         });
     });
@@ -1468,7 +1427,6 @@ fn tool_pass_details_widget(
                                 let enable_box = ui.checkbox(&mut enabled_val, "");
                                 if enable_box.changed() {
                                     let _ = ui_context.send_ui_message(
-                                        ui.ctx(),
                                         UIMessage::ToolPassEnableChanged {
                                             index: pass_index,
                                             enabled: enabled_val.clone(),
@@ -1522,17 +1480,14 @@ fn tool_pass_name_widget(
             .memory_mut(|memory| memory.request_focus(text_edit.id));
 
         if text_edit.changed() || text_edit.lost_focus() {
-            let _ = ui_context.send_ui_message(
-                ui.ctx(),
-                UIMessage::ToolPassNameChanged {
-                    index: pass_index,
-                    name: pen_name.to_string(),
-                },
-            );
+            let _ = ui_context.send_ui_message(UIMessage::ToolPassNameChanged {
+                index: pass_index,
+                name: pen_name.to_string(),
+            });
         }
 
         if text_edit.clicked_elsewhere() {
-            let _ = ui_context.send_ui_message(ui.ctx(), UIMessage::ToolPassNameLostFocus);
+            let _ = ui_context.send_ui_message(UIMessage::ToolPassNameLostFocus);
         }
     } else {
         let text = WidgetText::from(pen_name).strong();
@@ -1546,10 +1501,8 @@ fn tool_pass_name_widget(
         );
 
         if pen_name_widget.clicked() {
-            let _ = ui_context.send_ui_message(
-                ui.ctx(),
-                UIMessage::ToolPassNameClicked { index: pass_index },
-            );
+            let _ =
+                ui_context.send_ui_message(UIMessage::ToolPassNameClicked { index: pass_index });
         }
     }
 }
@@ -1582,13 +1535,10 @@ fn tool_pass_colour_widget(
             strip.cell(|ui| {
                 let mut colour = tool_pass.colour().clone();
                 if ui.color_edit_button_srgb(&mut colour).changed() {
-                    let _ = ui_context.send_ui_message(
-                        ui.ctx(),
-                        UIMessage::ToolPassColourChanged {
-                            index: pass_index,
-                            colour: colour.clone(),
-                        },
-                    );
+                    let _ = ui_context.send_ui_message(UIMessage::ToolPassColourChanged {
+                        index: pass_index,
+                        colour: colour.clone(),
+                    });
                 };
             });
         });
@@ -1619,7 +1569,7 @@ fn tool_pass_power_widget(
             .memory_mut(|memory| memory.request_focus(text_edit.id));
 
         if text_edit.clicked_elsewhere() {
-            let _ = ui_context.send_ui_message(ui.ctx(), UIMessage::ToolPassPowerLostFocus);
+            let _ = ui_context.send_ui_message(UIMessage::ToolPassPowerLostFocus);
         }
     } else {
         let pen_power_label = Label::new(format!("Power: {pen_power_str}")).sense(Sense::click());
@@ -1632,10 +1582,8 @@ fn tool_pass_power_widget(
         );
 
         if pen_power_widget.clicked() {
-            let _ = ui_context.send_ui_message(
-                ui.ctx(),
-                UIMessage::ToolPassPowerClicked { index: pass_index },
-            );
+            let _ =
+                ui_context.send_ui_message(UIMessage::ToolPassPowerClicked { index: pass_index });
         }
     }
 }
@@ -1667,7 +1615,7 @@ fn tool_pass_speed_widget(
             .memory_mut(|memory| memory.request_focus(text_edit.id));
 
         if text_edit.clicked_elsewhere() {
-            let _ = ui_context.send_ui_message(ui.ctx(), UIMessage::ToolPassSpeedLostFocus);
+            let _ = ui_context.send_ui_message(UIMessage::ToolPassSpeedLostFocus);
         }
     } else {
         let pen_speed_label = Label::new(format!("Speed: {pen_speed_str}")).sense(Sense::click());
@@ -1680,10 +1628,8 @@ fn tool_pass_speed_widget(
         );
 
         if pen_speed_widget.clicked() {
-            let _ = ui_context.send_ui_message(
-                ui.ctx(),
-                UIMessage::ToolPassSpeedClicked { index: pass_index },
-            );
+            let _ =
+                ui_context.send_ui_message(UIMessage::ToolPassSpeedClicked { index: pass_index });
         }
     }
 }
@@ -1706,12 +1652,9 @@ fn design_file_widget(
     design_preview: &mut Option<DesignPreview>,
     size: egui::Vec2,
 ) -> egui::Response {
-    let _ = ui_context.send_ui_message(
-        ui.ctx(),
-        UIMessage::DesignPreviewSize {
-            size_before_wrap: size,
-        },
-    );
+    let _ = ui_context.send_ui_message(UIMessage::DesignPreviewSize {
+        size_before_wrap: size,
+    });
 
     let (_, widget_rect) = ui.allocate_space(size);
     ui.painter()
@@ -1849,7 +1792,7 @@ fn error_dialog(
                 }
                 ui.with_layout(Layout::right_to_left(Align::BOTTOM), |ui| {
                     if ui.button("ok").clicked() {
-                        let _ = ui_context.send_ui_message(ctx, UIMessage::CloseErrorDialog);
+                        let _ = ui_context.send_ui_message(UIMessage::CloseErrorDialog);
                     }
                 });
             });
@@ -1859,7 +1802,7 @@ fn error_dialog(
                     || i.key_pressed(Key::Enter)
                 {
                     // Tell parent to close us.
-                    let _ = ui_context.send_ui_message(ctx, UIMessage::CloseErrorDialog);
+                    let _ = ui_context.send_ui_message(UIMessage::CloseErrorDialog);
                 }
             });
         },
@@ -1901,10 +1844,8 @@ fn settings_dialog(
                                 .text_edit_singleline(path)
                                 .on_hover_text(r#"This is the device that will be used to print."#);
                             if printer_edit.changed() || printer_edit.lost_focus() {
-                                let _ = ui_context.send_ui_message(
-                                    ctx,
-                                    UIMessage::PrinterSettingsChanged { printer },
-                                );
+                                let _ = ui_context
+                                    .send_ui_message(UIMessage::PrinterSettingsChanged { printer });
                             }
                         }
                         #[cfg(target_os = "windows")]
@@ -1958,11 +1899,11 @@ fn settings_dialog(
 
                 ui.with_layout(Layout::right_to_left(Align::BOTTOM), |ui| {
                     if ui.button("Save and Close").clicked() {
-                        let _ = ui_context.send_ui_message(ctx, UIMessage::SaveSettings);
-                        let _ = ui_context.send_ui_message(ctx, UIMessage::CloseSettingsDialog);
+                        let _ = ui_context.send_ui_message(UIMessage::SaveSettings);
+                        let _ = ui_context.send_ui_message(UIMessage::CloseSettingsDialog);
                     }
                     if ui.button("Discard and Close").clicked() {
-                        let _ = ui_context.send_ui_message(ctx, UIMessage::CloseSettingsDialog);
+                        let _ = ui_context.send_ui_message(UIMessage::CloseSettingsDialog);
                     }
                 });
             });
@@ -1972,7 +1913,7 @@ fn settings_dialog(
                     || i.key_pressed(Key::Enter)
                 {
                     // Tell parent to close us.
-                    let _ = ui_context.send_ui_message(ctx, UIMessage::CloseSettingsDialog);
+                    let _ = ui_context.send_ui_message(UIMessage::CloseSettingsDialog);
                 }
             });
         },
@@ -2061,7 +2002,7 @@ fn focus_changing(
             ToolPassWidgetEditing::Power => {
                 if let Ok(power) = pen_widget.power_editing_text.parse::<u64>() {
                     let _ = ui_context
-                        .send_ui_message(ctx, UIMessage::ToolPassPowerChanged { index, power });
+                        .send_ui_message(UIMessage::ToolPassPowerChanged { index, power });
                 } else {
                     // TODO: Flash red
                     allow_move = false;
@@ -2071,7 +2012,7 @@ fn focus_changing(
             ToolPassWidgetEditing::Speed => {
                 if let Ok(speed) = pen_widget.speed_editing_text.parse::<u64>() {
                     let _ = ui_context
-                        .send_ui_message(ctx, UIMessage::ToolPassSpeedChanged { index, speed });
+                        .send_ui_message(UIMessage::ToolPassSpeedChanged { index, speed });
                 } else {
                     // TODO: Flash red
                     allow_move = false;

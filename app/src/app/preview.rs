@@ -134,14 +134,6 @@ impl DesignPreview {
         }
     }
 
-    /// Checks if we are currently rendering a preview of the design.
-    ///
-    /// # Returns
-    /// `true` if the preview is currently being rendered.
-    pub fn is_rendering(&self) -> bool {
-        self.waiting_render_callback.is_some()
-    }
-
     /// Gets the image to be drawn to the UI.
     ///
     /// # Arguments
