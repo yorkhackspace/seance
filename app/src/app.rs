@@ -1004,6 +1004,18 @@ fn toolbar_widget(
                     if ui.button("Export Laser Settings").clicked() {
                         let _ = ui_context.send_ui_message(UIMessage::ShowExportToolPathSettingsDialog);
                     }
+
+                    if ui.button("Select All").clicked() {
+                        for (index, _) in tool_passes.iter().enumerate() {
+                            let _ = ui_context.send_ui_message(UIMessage::ToolPassEnableChanged { index, enabled: true });
+                        }
+                    }
+
+                    if ui.button("Deselect All").clicked() {
+                        for (index, _) in tool_passes.iter().enumerate() {
+                            let _ = ui_context.send_ui_message(UIMessage::ToolPassEnableChanged { index, enabled: false });
+                        }
+                    }
                 });
             });
 
