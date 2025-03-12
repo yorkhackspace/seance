@@ -13,8 +13,6 @@ use app::{render_task, RenderRequest};
 fn main() -> eframe::Result {
     use std::sync::{Arc, Mutex};
 
-    use egui::FontId;
-
     env_logger::init();
 
     let render_request: Arc<Mutex<Option<RenderRequest>>> = Default::default();
@@ -26,8 +24,6 @@ fn main() -> eframe::Result {
             .with_inner_size([400.0, 300.0])
             .with_min_inner_size([640.0, 480.0])
             .with_drag_and_drop(true),
-        follow_system_theme: true,
-        default_theme: eframe::Theme::Dark,
         renderer: eframe::Renderer::Wgpu,
         persist_window: true,
         ..Default::default()
@@ -39,21 +35,11 @@ fn main() -> eframe::Result {
             let mut fonts = egui::FontDefinitions::default();
             fonts.font_data.insert(
                 "Departure Mono".to_owned(),
-                egui::FontData::from_static(include_bytes!(
+                Arc::new(egui::FontData::from_static(include_bytes!(
                     "../fonts/departure-mono/DepartureMono-Regular.otf"
-                )),
+                ))),
             );
             cc.egui_ctx.set_fonts(fonts);
-
-            let font_id = FontId {
-                size: 24.0,
-                family: egui::FontFamily::Monospace,
-            };
-            let mut style = egui::Style::default();
-            style
-                .text_styles
-                .insert(egui::TextStyle::Name("Movement Buttons".into()), font_id);
-            cc.egui_ctx.set_style(style);
 
             egui_extras::install_image_loaders(&cc.egui_ctx);
             Ok(Box::new(Seance::new(cc, render_request)))

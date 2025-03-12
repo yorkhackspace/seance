@@ -15,8 +15,8 @@ use std::{
 };
 
 use egui::{
-    Align, Color32, Frame, Key, Label, Layout, Margin, Pos2, Rect, RichText, ScrollArea, Sense,
-    Slider, Stroke, TextEdit, Vec2, Visuals, WidgetText,
+    Align, Color32, FontId, Frame, Key, Label, Layout, Margin, Pos2, Rect, RichText, ScrollArea,
+    Sense, Slider, Stroke, StrokeKind, TextEdit, UiBuilder, Vec2, Visuals, WidgetText,
 };
 use egui_dnd::{dnd, DragDropConfig};
 use egui_extras::{Size, StripBuilder};
@@ -521,7 +521,7 @@ impl eframe::App for Seance {
                     ui.add_space(16.0);
                 }
 
-                egui::global_dark_light_mode_buttons(ui);
+                egui::global_theme_preference_buttons(ui);
 
                 if ui.style().visuals.dark_mode != self.dark_mode {
                     self.dark_mode = ui.style().visuals.dark_mode;
@@ -537,9 +537,9 @@ impl eframe::App for Seance {
                     strip.cell(|ui| {
                         Frame::default()
                             .outer_margin(Margin {
-                                left: 0.0,
-                                right: 0.0,
-                                top: 0.0,
+                                left: 0,
+                                right: 0,
+                                top: 0,
                                 bottom: ui.style().spacing.menu_margin.bottom,
                             })
                             .show(ui, |ui| {
@@ -1243,10 +1243,10 @@ fn design_preview_navigation(
                         let (button_text, tooltip, event) =
                             buttons_iter.next().expect("There must be a button");
                         if ui
-                            .button(
-                                RichText::new(button_text)
-                                    .text_style(egui::TextStyle::Name("Movement Buttons".into())),
-                            )
+                            .button(RichText::new(button_text).font(FontId {
+                                size: 24.0,
+                                family: egui::FontFamily::Monospace,
+                            }))
                             .on_hover_text(tooltip)
                             .clicked()
                         {
@@ -1295,28 +1295,31 @@ fn tool_passes_widget(
             })
             .show_vec::<ToolPass>(tool_passes, |ui, pass, handle, state| {
                 ui.horizontal(|ui| {
-                    handle.show_drag_cursor_on_hover(false).ui(ui, |ui| {
-                        let mut widget_size = ui.available_size_before_wrap();
-                        widget_size.y = 60.0;
-                        let (_, widget_rect) = ui.allocate_space(widget_size);
-                        ui.painter()
-                            .rect_filled(widget_rect, 2.0, ui.style().visuals.panel_fill);
-                        ui.painter().rect_stroke(
-                            widget_rect,
-                            2.0,
-                            Stroke::new(2.0, Color32::DARK_GRAY),
-                        );
+                    let mut widget_size = ui.available_size_before_wrap();
+                    widget_size.y = 60.0;
+                    let (_, widget_rect) = ui.allocate_space(widget_size);
+                    ui.painter()
+                        .rect_filled(widget_rect, 2.0, ui.style().visuals.panel_fill);
+                    ui.painter().rect_stroke(
+                        widget_rect,
+                        2.0,
+                        Stroke::new(2.0, Color32::DARK_GRAY),
+                        StrokeKind::Inside,
+                    );
 
-                        let mut child_ui =
-                            ui.child_ui(widget_rect, Layout::left_to_right(Align::Center), None);
-                        tool_pass_widget(
-                            &mut child_ui,
-                            ui_context,
-                            pass,
-                            state.index,
-                            &mut tool_pass_widget_states[state.index], // TODO: BAD!
-                        );
-                    });
+                    let mut child_ui = ui.new_child(
+                        UiBuilder::new()
+                            .max_rect(widget_rect)
+                            .layout(Layout::left_to_right(Align::Center)),
+                    );
+                    tool_pass_widget(
+                        &mut child_ui,
+                        ui_context,
+                        handle,
+                        pass,
+                        state.index,
+                        &mut tool_pass_widget_states[state.index], // TODO: BAD!
+                    );
                 });
             });
 
@@ -1377,9 +1380,10 @@ enum ToolPassWidgetEditing {
 ///
 /// # Returns
 /// An [`egui::Response`].
-fn tool_pass_widget(
+fn tool_pass_widget<'handle>(
     ui: &mut egui::Ui,
     ui_context: &mut UIContext,
+    handle: egui_dnd::Handle<'handle>,
     tool_pass: &ToolPass,
     pass_index: usize,
     state: &mut ToolPassWidgetState,
@@ -1390,14 +1394,16 @@ fn tool_pass_widget(
         .horizontal(|mut strip| {
             // Drag Handle
             strip.cell(|ui| {
-                Frame::default().inner_margin(10.0).show(ui, |ui| {
-                    ui.label("☰").on_hover_cursor(egui::CursorIcon::Grab);
+                handle.show_drag_cursor_on_hover(true).ui(ui, |ui| {
+                    Frame::default().inner_margin(10.0).show(ui, |ui| {
+                        ui.label("☰").on_hover_cursor(egui::CursorIcon::Grab);
+                    });
                 });
             });
             strip.cell(|ui| {
                 let mut margin = Margin::default();
-                margin.left = 10.0;
-                margin.right = 10.0;
+                margin.left = 10;
+                margin.right = 10;
                 Frame::default().inner_margin(margin).show(ui, |ui| {
                     tool_pass_details_widget(ui, ui_context, tool_pass, pass_index, state);
                 });
@@ -1614,7 +1620,7 @@ fn tool_pass_speed_widget(
     state: &mut ToolPassWidgetState,
 ) {
     let mut margin = Margin::default();
-    margin.right = 10.0;
+    margin.right = 10;
     let pen_speed_str = &mut state.speed_editing_text;
     if matches!(state.editing, ToolPassWidgetEditing::Speed) {
         let text_edit = ui.add(
@@ -1669,8 +1675,12 @@ fn design_file_widget(
     });
 
     let (_, widget_rect) = ui.allocate_space(size);
-    ui.painter()
-        .rect_stroke(widget_rect, 2.0, Stroke::new(2.0, Color32::DARK_GRAY));
+    ui.painter().rect_stroke(
+        widget_rect,
+        2.0,
+        Stroke::new(2.0, Color32::DARK_GRAY),
+        StrokeKind::Inside,
+    );
 
     {
         let Ok(design_file_lock) = design_file.read() else {
@@ -1690,7 +1700,11 @@ fn design_file_widget(
         return design_file_placeholder(ui, widget_rect);
     };
 
-    let mut child_ui = ui.child_ui(widget_rect, Layout::left_to_right(Align::Min), None);
+    let mut child_ui = ui.new_child(
+        UiBuilder::new()
+            .max_rect(widget_rect)
+            .layout(Layout::left_to_right(Align::Min)),
+    );
 
     let response = ScrollArea::both()
         .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
