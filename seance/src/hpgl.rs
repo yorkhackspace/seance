@@ -1,3 +1,7 @@
+//! `hpgl`
+//!
+//! Contains methods for working with HPGL.
+
 use std::collections::HashMap;
 
 use crate::{
@@ -13,9 +17,10 @@ use crate::{
 ///
 /// # Returns
 /// HPGL as a string.
+#[allow(clippy::module_name_repetitions)]
 pub fn generate_hpgl(
     resolved_paths: &HashMap<PathColour, Vec<ResolvedPath>>,
-    tool_passes: &Vec<ToolPass>,
+    tool_passes: &[ToolPass],
 ) -> String {
     if tool_passes.len() != 16 {
         return "Exactly 16 tool passes are required".to_string();
@@ -39,7 +44,7 @@ pub fn generate_hpgl(
     let mut hpgl = var_name;
 
     'laser_passes_iter: for (index, pass) in tool_passes.iter().enumerate() {
-        if let Some(paths) = resolved_paths.get(&PathColour(pass.colour().clone())) {
+        if let Some(paths) = resolved_paths.get(&PathColour(*pass.colour())) {
             if paths.is_empty() {
                 continue 'laser_passes_iter;
             }
@@ -95,7 +100,7 @@ fn trace_path(path: &ResolvedPath) -> String {
     if let Some(point) = path.first() {
         let x = point.x;
         let y = point.y;
-        hpgl.push_str(&format!("PU{x},{y};"))
+        hpgl.push_str(&format!("PU{x},{y};"));
     }
 
     for point in path {

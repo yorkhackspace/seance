@@ -1,8 +1,13 @@
+//! `laser_passes`
+//!
+//! Contains definitions for tool passes.
+
 use serde::{Deserialize, Serialize};
 
 /// The settings for a single pass of the tool head over lines of a given colour.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash)]
 pub struct ToolPass {
+    /// The user-specified name of this tool pass.
     name: String,
     /// Colour channel value of lines to machine [R, G, B].
     colour: [u8; 3],
@@ -110,7 +115,7 @@ impl ToolPass {
     /// Gets the enable state of the tool pass
     ///
     /// # Returns
-    /// Whether the tool pass is enabled
+    /// Whether the tool pass is enabled.
     pub fn enabled(&self) -> &bool {
         &self.enable
     }

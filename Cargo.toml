@@ -12,13 +12,12 @@ rust-version = "1.83"
 missing_docs = "deny"
 
 [workspace.lints.clippy]
-rust_2018_idioms = "warn"
 manual_assert = "deny"
 missing_assert_message = "deny"
 disallowed_macros = "deny"
 doc_markdown = "deny"
 missing_docs_in_private_items = "deny"
-pedantic = "deny"
+too_many_arguments = "allow"
 
 [profile.release]
 opt-level = 2

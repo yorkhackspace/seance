@@ -10,7 +10,6 @@ use lyon_algorithms::geom::euclid::UnknownUnit;
 use lyon_algorithms::path::math::Point;
 use lyon_algorithms::path::PathSlice;
 use lyon_algorithms::walk::{walk_along_path, RegularPattern, WalkerEvent};
-use usvg;
 use usvg::Path;
 
 use crate::{ToolPass, BED_HEIGHT_MM};
@@ -59,6 +58,8 @@ impl PartialEq<[u8; 3]> for PathColour {
 ///
 /// # Returns
 /// A set of resolved paths, grouped by path colour.
+#[allow(clippy::module_name_repetitions)]
+#[allow(clippy::implicit_hasher)]
 pub fn resolve_paths(
     paths_grouped_by_colour: &HashMap<PathColour, Vec<Box<Path>>>,
     offset: Vec2,
@@ -147,7 +148,7 @@ pub fn resolve_paths(
             let mut points = vec![];
             points_along_path(built_path.as_slice(), &mut points, interval);
             if closed {
-                if let Some(first_point) = points.get(0) {
+                if let Some(first_point) = points.first() {
                     points.push(*first_point);
                 }
             }
@@ -156,7 +157,7 @@ pub fn resolve_paths(
                 resolved_points.push(point.into());
             }
 
-            let entry = resolved_paths.entry(path_colour.clone()).or_default();
+            let entry = resolved_paths.entry(*path_colour).or_default();
             entry.push(resolved_points);
         }
     }
@@ -194,7 +195,7 @@ pub fn convert_points_to_plotter_units(
         HashMap::with_capacity(paths_in_mm.capacity());
     for (path_colour, paths) in paths_in_mm {
         for path in paths {
-            let entry = resolved_paths.entry(path_colour.clone()).or_default();
+            let entry = resolved_paths.entry(*path_colour).or_default();
             entry.push(points_in_mm_to_printer_units(path));
         }
     }
@@ -231,11 +232,7 @@ impl From<lyon_algorithms::geom::euclid::Point2D<f32, UnknownUnit>> for PointInM
 /// * `path`: The path to trace.
 /// * `points`: The vector of points to push new points into.
 /// * `interval`: How often to sample along a path, in SVG units.
-fn points_along_path<'path_slice>(
-    path: PathSlice<'path_slice>,
-    points: &mut Vec<Point>,
-    interval: f32,
-) {
+fn points_along_path(path: PathSlice<'_>, points: &mut Vec<Point>, interval: f32) {
     let mut pattern = RegularPattern {
         callback: &mut |event: WalkerEvent<'_>| {
             points.push(event.position);
@@ -261,7 +258,7 @@ fn points_along_path<'path_slice>(
 /// * `offset_y`: Offset in mm, where +y is more down.
 fn offset_point(point: &mut Point, (offset_x, offset_y): Vec2) {
     point.x += offset_x;
-    point.y += offset_y
+    point.y += offset_y;
 }
 
 /// Takes a vector of points expressed in mm and turns them into a vector of resolved points.
@@ -278,7 +275,7 @@ fn points_in_mm_to_printer_units(points: &[PointInMillimeters]) -> Vec<ResolvedP
         resolved_points.push(ResolvedPoint {
             x: mm_to_hpgl_units(point.x, true),
             y: mm_to_hpgl_units(point.y, false),
-        })
+        });
     }
 
     resolved_points
@@ -289,7 +286,8 @@ fn points_in_mm_to_printer_units(points: &[PointInMillimeters]) -> Vec<ResolvedP
 /// # Arguments
 /// * `mm`: The value in mm.
 /// * `is_x_axis`: The GCC Spirit has x=0 at the bottom. Generally we want 0,0 to be
-/// in the top-left, so we mirror the x axis in this case.
+///   in the top-left, so we mirror the x axis in this case.
+#[allow(clippy::cast_possible_truncation)]
 pub fn mm_to_hpgl_units(mm: f32, is_x_axis: bool) -> i16 {
     let position_mm = if is_x_axis { mm } else { BED_HEIGHT_MM - mm };
     (position_mm / MM_PER_PLOTTER_UNIT).round() as i16

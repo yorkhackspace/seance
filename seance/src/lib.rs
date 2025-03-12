@@ -21,8 +21,8 @@ pub use paths::resolve_paths;
 use paths::{convert_points_to_plotter_units, filter_paths_to_tool_passes};
 use pcl::wrap_hpgl_in_pcl;
 use svg::get_paths_grouped_by_colour;
-use usvg;
 
+/// Convenience type for storing a vector of two numbers.
 type Vec2 = (f32, f32);
 
 /// Minimum X position of the X axis in mm.
@@ -45,7 +45,7 @@ pub const BED_HEIGHT_MM: f32 = BED_Y_AXIS_MAXIMUM_MM;
 
 /// The default print device to use on non-Windows systems.
 #[cfg(not(target_os = "windows"))]
-pub const DEFAULT_PRINT_DEVICE: &'static str = "/dev/usb/lp0";
+pub const DEFAULT_PRINT_DEVICE: &str = "/dev/usb/lp0";
 
 /// A loaded design.
 pub struct DesignFile {
@@ -128,7 +128,6 @@ impl PrintDevice {
             #[cfg(not(target_os = "windows"))]
             PrintDevice::Path { path } => {
                 let mut file = OpenOptions::new()
-                    .write(true)
                     .create(false)
                     .append(true)
                     .open(path)
@@ -201,6 +200,9 @@ impl Default for PrintDevice {
 ///
 /// # Returns
 /// `Ok(())` if the file has been sent correctly, otherwise a [`SendToDeviceError`].
+///
+/// # Errors
+/// If there's an error preparing the print file or communicating with the printer.
 pub fn cut_file(
     design_file: &DesignFile,
     tool_passes: &Vec<ToolPass>,
@@ -209,12 +211,12 @@ pub fn cut_file(
 ) -> Result<(), SendToDeviceError> {
     let design_name = design_file.name();
 
-    let paths = get_paths_grouped_by_colour(&design_file.tree)?;
+    let paths = get_paths_grouped_by_colour(&design_file.tree);
     let mut paths_in_mm = resolve_paths(&paths, offset, 1.0);
     filter_paths_to_tool_passes(&mut paths_in_mm, tool_passes);
     let resolved_paths = convert_points_to_plotter_units(&paths_in_mm);
-    let hpgl = generate_hpgl(&resolved_paths, &tool_passes);
-    let pcl = wrap_hpgl_in_pcl(hpgl, &design_name, &tool_passes);
+    let hpgl = generate_hpgl(&resolved_paths, tool_passes);
+    let pcl = wrap_hpgl_in_pcl(hpgl, design_name, tool_passes);
     print_device.print(&pcl)?;
 
     Ok(())

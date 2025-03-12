@@ -128,7 +128,7 @@ impl UIContext {
     fn new(ui_message_tx: UIMessageTx) -> Self {
         Self {
             ui_message_tx,
-            previous_frame_widgets: Default::default(),
+            previous_frame_widgets: HashMap::default(),
         }
     }
 
@@ -276,6 +276,10 @@ impl Seance {
         }
     }
 
+    /// Handle all UI messages from the previous frame.
+    ///
+    /// # Arguments
+    /// * `ctx`: egui context.
     fn handle_ui_messages(&mut self, ctx: &egui::Context) {
         while let Ok(msg) = self.ui_message_rx.try_recv() {
             match msg {
@@ -364,7 +368,7 @@ impl Seance {
                 }
                 UIMessage::DesignFileChanged { design_file } => {
                     let Ok(mut design_lock) = self.design_file.write() else {
-                        let _ = self.ui_context.send_ui_message(UIMessage::ShowError {
+                        self.ui_context.send_ui_message(UIMessage::ShowError {
                             error: "Could not store design file".to_string(),
                             details: Some("Unable to write to design file store".to_string()),
                         });
@@ -418,7 +422,7 @@ impl Seance {
                     }
                 }
                 UIMessage::PreviewZoomLevelChanged { zoom } => {
-                    self.preview_zoom_level = zoom.min(MAX_ZOOM_LEVEL).max(MIN_ZOOM_LEVEL);
+                    self.preview_zoom_level = zoom.clamp(MIN_ZOOM_LEVEL, MAX_ZOOM_LEVEL);
                     if let Some(preview) = &mut self.design_preview_image {
                         preview.zoom(self.preview_zoom_level);
                     }
@@ -521,8 +525,7 @@ impl eframe::App for Seance {
                 if !is_web {
                     ui.menu_button("File", |ui| {
                         if ui.button("Settings").clicked() {
-                            let _ = self
-                                .ui_context
+                            self.ui_context
                                 .send_ui_message(UIMessage::ShowSettingsDialog);
                         }
 
@@ -592,14 +595,13 @@ impl eframe::App for Seance {
                 if let Some(path) = &i.raw.dropped_files[0].path {
                     match load_design(path, &mut self.hasher) {
                         Ok(file) => {
-                            let _ = self
-                                .ui_context
+                            self.ui_context
                                 .send_ui_message(UIMessage::DesignFileChanged {
                                     design_file: file,
                                 });
                         }
                         Err(err) => {
-                            let _ = self.ui_context.send_ui_message(UIMessage::ShowError {
+                            self.ui_context.send_ui_message(UIMessage::ShowError {
                                 error: "Failed to load design".to_string(),
                                 details: Some(err),
                             });
@@ -609,15 +611,15 @@ impl eframe::App for Seance {
             }
 
             if i.key_pressed(Key::Enter) {
-                let _ = self.ui_context.send_ui_message(UIMessage::EnterKeyPressed);
+                self.ui_context.send_ui_message(UIMessage::EnterKeyPressed);
             }
 
             if i.key_pressed(Key::Tab) {
-                let _ = self.ui_context.send_ui_message(UIMessage::TabKeyPressed);
+                self.ui_context.send_ui_message(UIMessage::TabKeyPressed);
             }
 
             if i.key_pressed(Key::Space) {
-                let _ = self.ui_context.send_ui_message(UIMessage::SpaceKeyPressed);
+                self.ui_context.send_ui_message(UIMessage::SpaceKeyPressed);
             }
         });
 
@@ -711,7 +713,10 @@ enum UIMessage {
         enabled: bool,
     },
     /// The zoom level of the design preview has changed.
-    PreviewZoomLevelChanged { zoom: f32 },
+    PreviewZoomLevelChanged {
+        /// The new zoom level.
+        zoom: f32,
+    },
     /// This event is emitted when we know how large the design preview area is (e.g. after UI resize).
     DesignPreviewSize {
         /// The size available for the design preview.
@@ -782,7 +787,7 @@ impl DesignMoveDirection {
     /// # Returns
     /// A new offset, in mm.
     pub fn apply(&self, current_offset: &egui::Vec2, step_mm: f32) -> egui::Vec2 {
-        let mut offset = current_offset.clone();
+        let mut offset = *current_offset;
         match self {
             DesignMoveDirection::UpAndLeft => {
                 let step_each_side = step_mm / (2.0f32.sqrt());
@@ -866,13 +871,12 @@ impl FileDialog {
                         if let Some(path) = path {
                             match load_design(&path, hasher) {
                                 Ok(file) => {
-                                    let _ =
-                                        ui_context.send_ui_message(UIMessage::DesignFileChanged {
-                                            design_file: file,
-                                        });
+                                    ui_context.send_ui_message(UIMessage::DesignFileChanged {
+                                        design_file: file,
+                                    });
                                 }
                                 Err(err) => {
-                                    let _ = ui_context.send_ui_message(UIMessage::ShowError {
+                                    ui_context.send_ui_message(UIMessage::ShowError {
                                         error: "Failed to load design".to_string(),
                                         details: Some(err),
                                     });
@@ -892,12 +896,12 @@ impl FileDialog {
                         if let Some(path) = path {
                             match Self::handle_open_tool_paths(&path) {
                                 Ok(passes) => {
-                                    let _ = ui_context.send_ui_message(
-                                        UIMessage::ToolPassesListChanged { passes },
-                                    );
+                                    ui_context.send_ui_message(UIMessage::ToolPassesListChanged {
+                                        passes,
+                                    });
                                 }
                                 Err(err) => {
-                                    let _ = ui_context.send_ui_message(UIMessage::ShowError {
+                                    ui_context.send_ui_message(UIMessage::ShowError {
                                         error: err,
                                         details: None,
                                     });
@@ -972,7 +976,7 @@ impl FileDialog {
 fn toolbar_widget(
     ui: &mut egui::Ui,
     ui_context: &mut UIContext,
-    design_file: &Arc<RwLock<Option<(DesignFile, u64, PathBuf)>>>,
+    design_file: &Arc<RwLock<Option<DesignWithMeta>>>,
     tool_passes: &Vec<ToolPass>,
     print_device: &PrintDevice,
     offset: &Vec2,
@@ -983,26 +987,26 @@ fn toolbar_widget(
             strip.cell(|ui| {
                 ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
                     if ui.button("Open Design").clicked() {
-                        let _ = ui_context.send_ui_message(UIMessage::ShowOpenFileDialog);
+                        ui_context.send_ui_message(UIMessage::ShowOpenFileDialog);
                     }
 
                     if ui.button("Import Laser Settings").clicked() {
-                        let _ = ui_context.send_ui_message(UIMessage::ShowOpenToolPathSettingsDialog);
+                        ui_context.send_ui_message(UIMessage::ShowOpenToolPathSettingsDialog);
                     }
 
                     if ui.button("Export Laser Settings").clicked() {
-                        let _ = ui_context.send_ui_message(UIMessage::ShowExportToolPathSettingsDialog);
+                        ui_context.send_ui_message(UIMessage::ShowExportToolPathSettingsDialog);
                     }
 
                     if ui.button("Enable All").clicked() {
                         for (index, _) in tool_passes.iter().enumerate() {
-                            let _ = ui_context.send_ui_message(UIMessage::ToolPassEnableChanged { index, enabled: true });
+                            ui_context.send_ui_message(UIMessage::ToolPassEnableChanged { index, enabled: true });
                         }
                     }
 
                     if ui.button("Disable All").clicked() {
                         for (index, _) in tool_passes.iter().enumerate() {
-                            let _ = ui_context.send_ui_message(UIMessage::ToolPassEnableChanged { index, enabled: false });
+                            ui_context.send_ui_message(UIMessage::ToolPassEnableChanged { index, enabled: false });
                         }
                     }
                 });
@@ -1051,7 +1055,7 @@ fn handle_cut_file_error(ui_context: &mut UIContext, err: SendToDeviceError) {
             format!("I/O error: {err:?}"),
         ),
     };
-    let _ = ui_context.send_ui_message(UIMessage::ShowError {
+    ui_context.send_ui_message(UIMessage::ShowError {
         error,
         details: Some(details),
     });
@@ -1071,8 +1075,8 @@ fn handle_cut_file_error(ui_context: &mut UIContext, err: SendToDeviceError) {
 fn ui_main(
     ui: &mut egui::Ui,
     ui_context: &mut UIContext,
-    tool_passes: &mut Vec<ToolPass>,
-    tool_pass_widget_states: &mut Vec<ToolPassWidgetState>,
+    tool_passes: &mut [ToolPass],
+    tool_pass_widget_states: &mut [ToolPassWidgetState],
     design_file: &Arc<RwLock<Option<DesignWithMeta>>>,
     design_preview_image: &mut Option<DesignPreview>,
     preview_zoom_level: f32,
@@ -1145,15 +1149,16 @@ fn design_preview_navigation(
         let zoom_widget = Slider::new(&mut zoom_value, MIN_ZOOM_LEVEL..=MAX_ZOOM_LEVEL);
         ui.label("Zoom");
         if ui.add(zoom_widget).changed() {
-            let _ =
-                ui_context.send_ui_message(UIMessage::PreviewZoomLevelChanged { zoom: zoom_value });
+            ui_context.send_ui_message(UIMessage::PreviewZoomLevelChanged { zoom: zoom_value });
         }
     });
     ui.separator();
     ui.label("Position Design");
     ui.horizontal(|ui| {
         ui.vertical(|ui| {
+            /// How many items in the button grid horizontally.
             const GRID_WIDTH: usize = 3;
+            /// How many items in the button grid vertically.
             const GRID_HEIGHT: usize = 3;
             // Buttons to be displayed along with their tooltips and associated events.
             let buttons: [(&str, &str, UIMessage); GRID_WIDTH * GRID_HEIGHT] = [
@@ -1239,7 +1244,7 @@ fn design_preview_navigation(
                             .on_hover_text(tooltip)
                             .clicked()
                         {
-                            let _ = ui_context.send_ui_message(event);
+                            ui_context.send_ui_message(event);
                         }
                     }
                 });
@@ -1253,8 +1258,7 @@ fn design_preview_navigation(
             );
             ui.label("Step By (mm)");
             if ui.add(step_by_widget).changed() {
-                let _ = ui_context
-                    .send_ui_message(UIMessage::DesignMoveStepChanged { step: step_value });
+                ui_context.send_ui_message(UIMessage::DesignMoveStepChanged { step: step_value });
             }
         });
     });
@@ -1270,8 +1274,8 @@ fn design_preview_navigation(
 fn tool_passes_widget(
     ui: &mut egui::Ui,
     ui_context: &mut UIContext,
-    tool_passes: &mut Vec<ToolPass>,
-    tool_pass_widget_states: &mut Vec<ToolPassWidgetState>,
+    tool_passes: &mut [ToolPass],
+    tool_pass_widget_states: &mut [ToolPassWidgetState],
 ) {
     // List of laser passes.
     ScrollArea::vertical().show(ui, |ui| {
@@ -1355,10 +1359,10 @@ enum ToolPassWidgetEditing {
 ///
 /// # Returns
 /// An [`egui::Response`].
-fn tool_pass_widget<'handle>(
+fn tool_pass_widget(
     ui: &mut egui::Ui,
     ui_context: &mut UIContext,
-    handle: egui_dnd::Handle<'handle>,
+    handle: egui_dnd::Handle<'_>,
     tool_pass: &ToolPass,
     pass_index: usize,
     state: &mut ToolPassWidgetState,
@@ -1376,11 +1380,12 @@ fn tool_pass_widget<'handle>(
                 });
             });
             strip.cell(|ui| {
-                let mut margin = Margin::default();
-                margin.left = 10;
-                margin.right = 10;
-                margin.top = 5;
-                margin.bottom = 5;
+                let margin = Margin {
+                    left: 10,
+                    right: 10,
+                    top: 5,
+                    bottom: 5,
+                };
                 Frame::default().inner_margin(margin).show(ui, |ui| {
                     tool_pass_details_widget(ui, ui_context, tool_pass, pass_index, state);
                 });
@@ -1418,16 +1423,14 @@ fn tool_pass_details_widget(
                         });
                         strip.cell(|ui| {
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                                let mut enabled_val = tool_pass.enabled().clone();
+                                let mut enabled_val = *tool_pass.enabled();
                                 let checkbox = Checkbox::without_text(&mut enabled_val);
                                 let enable_box = ui.add(checkbox);
                                 if enable_box.changed() {
-                                    let _ = ui_context.send_ui_message(
-                                        UIMessage::ToolPassEnableChanged {
-                                            index: pass_index,
-                                            enabled: enabled_val.clone(),
-                                        },
-                                    );
+                                    ui_context.send_ui_message(UIMessage::ToolPassEnableChanged {
+                                        index: pass_index,
+                                        enabled: enabled_val,
+                                    });
                                 }
                                 ui.label("Enabled");
                             });
@@ -1478,14 +1481,14 @@ fn tool_pass_name_widget(
             .memory_mut(|memory| memory.request_focus(text_edit.id));
 
         if text_edit.changed() || text_edit.lost_focus() {
-            let _ = ui_context.send_ui_message(UIMessage::ToolPassNameChanged {
+            ui_context.send_ui_message(UIMessage::ToolPassNameChanged {
                 index: pass_index,
                 name: pen_name.to_string(),
             });
         }
 
         if text_edit.clicked_elsewhere() {
-            let _ = ui_context.send_ui_message(UIMessage::ToolPassNameLostFocus);
+            ui_context.send_ui_message(UIMessage::ToolPassNameLostFocus);
         }
     } else {
         let text = WidgetText::from(pen_name).strong();
@@ -1499,8 +1502,7 @@ fn tool_pass_name_widget(
         );
 
         if pen_name_widget.clicked() {
-            let _ =
-                ui_context.send_ui_message(UIMessage::ToolPassNameClicked { index: pass_index });
+            ui_context.send_ui_message(UIMessage::ToolPassNameClicked { index: pass_index });
         }
     }
 }
@@ -1531,11 +1533,11 @@ fn tool_pass_colour_widget(
             });
             // Colour Swatch
             strip.cell(|ui| {
-                let mut colour = tool_pass.colour().clone();
+                let mut colour = *tool_pass.colour();
                 if ui.color_edit_button_srgb(&mut colour).changed() {
-                    let _ = ui_context.send_ui_message(UIMessage::ToolPassColourChanged {
+                    ui_context.send_ui_message(UIMessage::ToolPassColourChanged {
                         index: pass_index,
-                        colour: colour.clone(),
+                        colour,
                     });
                 };
             });
@@ -1562,7 +1564,7 @@ fn tool_pass_power_widget(
         .clamp_existing_to_range(true);
     ui.label("Power %");
     if ui.add(power_slider).changed() {
-        let _ = ui_context.send_ui_message(UIMessage::ToolPassPowerChanged {
+        ui_context.send_ui_message(UIMessage::ToolPassPowerChanged {
             index: pass_index,
             power: (power * 10.0).round() as u64,
         });
@@ -1588,7 +1590,7 @@ fn tool_pass_speed_widget(
         .range(MIN_SPEED_VALUE_FLOAT..=MAX_SPEED_VALUE_FLOAT)
         .clamp_existing_to_range(true);
     if ui.add(speed_slider).changed() {
-        let _ = ui_context.send_ui_message(UIMessage::ToolPassSpeedChanged {
+        ui_context.send_ui_message(UIMessage::ToolPassSpeedChanged {
             index: pass_index,
             speed: (speed * 10.0).round() as u64,
         });
@@ -1614,7 +1616,7 @@ fn design_file_widget(
     design_preview: &mut Option<DesignPreview>,
     size: egui::Vec2,
 ) -> egui::Response {
-    let _ = ui_context.send_ui_message(UIMessage::DesignPreviewSize {
+    ui_context.send_ui_message(UIMessage::DesignPreviewSize {
         size_before_wrap: size,
     });
 
@@ -1762,7 +1764,7 @@ fn error_dialog(
                 }
                 ui.with_layout(Layout::right_to_left(Align::BOTTOM), |ui| {
                     if ui.button("ok").clicked() {
-                        let _ = ui_context.send_ui_message(UIMessage::CloseErrorDialog);
+                        ui_context.send_ui_message(UIMessage::CloseErrorDialog);
                     }
                 });
             });
@@ -1772,7 +1774,7 @@ fn error_dialog(
                     || i.key_pressed(Key::Enter)
                 {
                     // Tell parent to close us.
-                    let _ = ui_context.send_ui_message(UIMessage::CloseErrorDialog);
+                    ui_context.send_ui_message(UIMessage::CloseErrorDialog);
                 }
             });
         },
@@ -1814,7 +1816,7 @@ fn settings_dialog(
                                 .text_edit_singleline(path)
                                 .on_hover_text(r#"This is the device that will be used to print."#);
                             if printer_edit.changed() || printer_edit.lost_focus() {
-                                let _ = ui_context
+                                ui_context
                                     .send_ui_message(UIMessage::PrinterSettingsChanged { printer });
                             }
                         }
@@ -1869,11 +1871,11 @@ fn settings_dialog(
 
                 ui.with_layout(Layout::right_to_left(Align::BOTTOM), |ui| {
                     if ui.button("Save and Close").clicked() {
-                        let _ = ui_context.send_ui_message(UIMessage::SaveSettings);
-                        let _ = ui_context.send_ui_message(UIMessage::CloseSettingsDialog);
+                        ui_context.send_ui_message(UIMessage::SaveSettings);
+                        ui_context.send_ui_message(UIMessage::CloseSettingsDialog);
                     }
                     if ui.button("Discard and Close").clicked() {
-                        let _ = ui_context.send_ui_message(UIMessage::CloseSettingsDialog);
+                        ui_context.send_ui_message(UIMessage::CloseSettingsDialog);
                     }
                 });
             });
@@ -1883,7 +1885,7 @@ fn settings_dialog(
                     || i.key_pressed(Key::Enter)
                 {
                     // Tell parent to close us.
-                    let _ = ui_context.send_ui_message(UIMessage::CloseSettingsDialog);
+                    ui_context.send_ui_message(UIMessage::CloseSettingsDialog);
                 }
             });
         },
@@ -1926,7 +1928,7 @@ fn load_design(
 
     match fs::read(path) {
         Ok(bytes) => {
-            let svg = parse_svg(&path, &bytes).map_err(|err| {
+            let svg = parse_svg(path, &bytes).map_err(|err| {
                 let error_string = format!("Error reading SVG file: {err}");
                 log::error!("{error_string}");
                 error_string
@@ -1975,7 +1977,7 @@ enum FocusChangingReason {
 fn focus_changing(
     ctx: &egui::Context,
     ui_context: &mut UIContext,
-    tool_pass_widget_states: &mut Vec<ToolPassWidgetState>,
+    tool_pass_widget_states: &mut [ToolPassWidgetState],
     reason: FocusChangingReason,
 ) {
     let mut allow_move = true;
@@ -2035,14 +2037,14 @@ pub fn all_capitalisations_of(input: &str) -> Vec<String> {
                 new_str += &input
                     .chars()
                     .nth(i)
-                    .expect(&format!("Could not get character {i}"))
+                    .unwrap_or_else(|| panic!("Could not get character {i}"))
                     .to_uppercase()
                     .to_string();
             } else {
                 new_str += &input
                     .chars()
                     .nth(i)
-                    .expect(&format!("Could not get character {i}"))
+                    .unwrap_or_else(|| panic!("Could not get character {i}"))
                     .to_lowercase()
                     .to_string();
             }

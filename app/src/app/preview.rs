@@ -59,7 +59,7 @@ impl DesignPreview {
         design_file: &Arc<RwLock<Option<DesignWithMeta>>>,
         render_request: Arc<Mutex<Option<RenderRequest>>>,
     ) -> Self {
-        zoom = zoom.min(MAX_ZOOM_LEVEL).max(MIN_ZOOM_LEVEL);
+        zoom = zoom.clamp(MIN_ZOOM_LEVEL, MAX_ZOOM_LEVEL);
         let image_texture = None;
 
         let (callback_tx, callback_rx) = oneshot::channel();
@@ -68,7 +68,7 @@ impl DesignPreview {
                 .lock()
                 .expect("Render requests mutex must be lockable");
             *render_request_lock = Some(RenderRequest {
-                size: size.clone(),
+                size,
                 design_offset_mm: Default::default(),
                 design_file: design_file.clone(),
                 callback: callback_tx,
@@ -102,7 +102,7 @@ impl DesignPreview {
     /// # Arguments
     /// * `zoom`: The new zoom level.
     pub fn zoom(&mut self, mut zoom: f32) {
-        zoom = zoom.min(MAX_ZOOM_LEVEL).max(MIN_ZOOM_LEVEL);
+        zoom = zoom.clamp(MIN_ZOOM_LEVEL, MAX_ZOOM_LEVEL);
         if zoom != self.zoom {
             self.zoom = zoom;
         }
@@ -364,7 +364,7 @@ fn render_inner(
     if let Some((DesignFile { tree, .. }, hash, _)) = &design {
         *previous_design_hash = Some(*hash);
 
-        let grouped_paths = get_paths_grouped_by_colour(tree).unwrap();
+        let grouped_paths = get_paths_grouped_by_colour(tree);
         let resolved_paths = resolve_paths(&grouped_paths, (offset_mm.x, offset_mm.y), 0.1);
 
         for (path_colour, paths) in resolved_paths {

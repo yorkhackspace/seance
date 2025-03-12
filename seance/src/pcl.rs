@@ -16,6 +16,7 @@ const ESC: char = '\x1b';
 ///
 /// # Returns
 /// PCL string that can be sent to the machine.
+#[allow(clippy::module_name_repetitions)]
 pub fn wrap_hpgl_in_pcl(hpgl: String, filename: &str, laser_passes: &Vec<ToolPass>) -> String {
     vec![
         pjl_universal_exit_language(),

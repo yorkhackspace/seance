@@ -18,7 +18,7 @@ fn main() -> eframe::Result {
     let icon = eframe::icon_data::from_png_bytes(include_bytes!("../../logo.png"))
         .expect("The icon data must be valid");
 
-    let render_request: Arc<Mutex<Option<RenderRequest>>> = Default::default();
+    let render_request: Arc<Mutex<Option<RenderRequest>>> = Arc::default();
     let render_thread_render_request = render_request.clone();
     let _render_thread = std::thread::spawn(|| render_task(render_thread_render_request));
 
