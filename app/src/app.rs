@@ -38,6 +38,15 @@ const DEFAULT_DESIGN_MOVE_STEP_MM: f32 = 10.0;
 /// The maximum amount that designs can be moved by.
 const MAXIMUM_DESIGN_MOVE_STEP_MM: f32 = 500.0;
 
+/// Minimum power value that can be set, as a floating point value.
+const MIN_POWER_VALUE_FLOAT: f32 = 0.0;
+/// Maximum power value that can be set, as an integer value.
+const MAX_POWER_VALUE_FLOAT: f32 = 100.0;
+/// Minimum speed value that can be set, as a floating point value.
+const MIN_SPEED_VALUE_FLOAT: f32 = 0.0;
+/// Maximum speed value that can be set, as an integer value.
+const MAX_SPEED_VALUE_FLOAT: f32 = 100.0;
+
 #[cfg(target_os = "windows")]
 use crate::USBPort;
 
@@ -215,9 +224,7 @@ impl Seance {
             let laser_pass_widget_states: Vec<ToolPassWidgetState> = seance_storage
                 .passes
                 .iter()
-                .map(|pass| {
-                    ToolPassWidgetState::new(Default::default(), pass.power(), pass.speed())
-                })
+                .map(|_| ToolPassWidgetState::new(Default::default()))
                 .collect::<Vec<_>>();
 
             return Seance {
@@ -243,7 +250,7 @@ impl Seance {
 
         let laser_passes_widget_states: Vec<ToolPassWidgetState> = default_pens
             .iter()
-            .map(|pass| ToolPassWidgetState::new(Default::default(), pass.power(), pass.speed()))
+            .map(|_| ToolPassWidgetState::new(Default::default()))
             .collect::<Vec<_>>();
 
         Seance {
@@ -397,23 +404,12 @@ impl Seance {
                     }
                 }
                 UIMessage::ToolPassNameLostFocus => {
-                    focus_changing(ctx, &mut self.ui_context, &mut self.tool_pass_widget_states);
-                }
-                UIMessage::ToolPassPowerClicked { index } => {
-                    if let Some(pass) = self.tool_pass_widget_states.get_mut(index) {
-                        pass.editing = ToolPassWidgetEditing::Power;
-                    }
-                }
-                UIMessage::ToolPassPowerLostFocus => {
-                    focus_changing(ctx, &mut self.ui_context, &mut self.tool_pass_widget_states);
-                }
-                UIMessage::ToolPassSpeedClicked { index } => {
-                    if let Some(pass) = self.tool_pass_widget_states.get_mut(index) {
-                        pass.editing = ToolPassWidgetEditing::Speed;
-                    }
-                }
-                UIMessage::ToolPassSpeedLostFocus => {
-                    focus_changing(ctx, &mut self.ui_context, &mut self.tool_pass_widget_states);
+                    focus_changing(
+                        ctx,
+                        &mut self.ui_context,
+                        &mut self.tool_pass_widget_states,
+                        FocusChangingReason::ToolPassNameLostFocus,
+                    );
                 }
                 UIMessage::ToolPassEnableChanged { index, enabled } => {
                     if let Some(pass) = self.passes.get_mut(index) {
@@ -455,13 +451,28 @@ impl Seance {
                     }
                 }
                 UIMessage::EnterKeyPressed => {
-                    focus_changing(ctx, &mut self.ui_context, &mut self.tool_pass_widget_states);
+                    focus_changing(
+                        ctx,
+                        &mut self.ui_context,
+                        &mut self.tool_pass_widget_states,
+                        FocusChangingReason::EnterKeyPressed,
+                    );
                 }
                 UIMessage::TabKeyPressed => {
-                    focus_changing(ctx, &mut self.ui_context, &mut self.tool_pass_widget_states);
+                    focus_changing(
+                        ctx,
+                        &mut self.ui_context,
+                        &mut self.tool_pass_widget_states,
+                        FocusChangingReason::TabKeyPressed,
+                    );
                 }
                 UIMessage::SpaceKeyPressed => {
-                    focus_changing(ctx, &mut self.ui_context, &mut self.tool_pass_widget_states);
+                    focus_changing(
+                        ctx,
+                        &mut self.ui_context,
+                        &mut self.tool_pass_widget_states,
+                        FocusChangingReason::SpaceKeyPressed,
+                    );
                 }
             }
         }
@@ -691,28 +702,15 @@ enum UIMessage {
     },
     /// The name of a tool pass has lost focus.
     ToolPassNameLostFocus,
-    /// The power of a tool pass has been clicked.
-    ToolPassPowerClicked {
-        /// The index of the tool pass that was clicked.
-        index: usize,
-    },
-    /// The power of a tool pass has lost focus.
-    ToolPassPowerLostFocus,
-    /// The speed of a tool pass has been clicked.
-    ToolPassSpeedClicked {
-        /// The index of the tool pass that was clicked.
-        index: usize,
-    },
-    /// The speed of a tool pass has lost focus.
-    ToolPassSpeedLostFocus,
+    /// Whether the tool pass is enabled has changed.
     ToolPassEnableChanged {
+        /// The index of the tool pass.
         index: usize,
+        /// Whether the tool pass should be set to enabled.
         enabled: bool,
     },
     /// The zoom level of the design preview has changed.
-    PreviewZoomLevelChanged {
-        zoom: f32,
-    },
+    PreviewZoomLevelChanged { zoom: f32 },
     /// This event is emitted when we know how large the design preview area is (e.g. after UI resize).
     DesignPreviewSize {
         /// The size available for the design preview.
@@ -747,16 +745,6 @@ enum SeanceUIElement {
     /// The label for a tool pass name.
     NameLabel {
         /// The index of the tool pass for which this is the name label.
-        index: usize,
-    },
-    /// The label for a tool pass power.
-    PowerLabel {
-        /// The index of the tool pass for which this is the power label.
-        index: usize,
-    },
-    /// The label for a tool pass speed.
-    SpeedLabel {
-        /// The index of the tool pass for which this is the speed label.
         index: usize,
     },
 }
@@ -1333,25 +1321,15 @@ fn tool_passes_widget(
 struct ToolPassWidgetState {
     /// Which aspect of the tool pass that is being edited.
     editing: ToolPassWidgetEditing,
-    /// The text being edited into the power field.
-    power_editing_text: String,
-    /// The text being edited into the speed field.
-    speed_editing_text: String,
 }
 
 impl ToolPassWidgetState {
     /// Creates a new [`ToolPassWidgetState`].
     ///
     /// # Arguments
-    /// * `editing`: The apect of the tool pass that is being edited.
-    /// * `power`: The power of the tool pass.
-    /// * `speed`: The speed of the tool pass.
-    fn new(editing: ToolPassWidgetEditing, power: &u64, speed: &u64) -> Self {
-        Self {
-            editing,
-            power_editing_text: power.to_string(),
-            speed_editing_text: speed.to_string(),
-        }
+    /// * `editing`: The aspect of the tool pass that is being edited.
+    fn new(editing: ToolPassWidgetEditing) -> Self {
+        Self { editing }
     }
 }
 
@@ -1363,10 +1341,6 @@ enum ToolPassWidgetEditing {
     None,
     /// The name is being edited.
     Name,
-    /// The power is being edited.
-    Power,
-    /// The speed is being edited.
-    Speed,
 }
 
 /// A single tool pass widget.
@@ -1460,10 +1434,12 @@ fn tool_pass_details_widget(
                 StripBuilder::new(ui)
                     .sizes(Size::remainder(), 2)
                     .horizontal(|mut strip| {
-                        strip.cell(|ui| tool_pass_power_widget(ui, ui_context, pass_index, state));
+                        strip.cell(|ui| {
+                            tool_pass_power_widget(ui, ui_context, tool_pass, pass_index)
+                        });
                         strip.cell(|ui| {
                             ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                                tool_pass_speed_widget(ui, ui_context, pass_index, state)
+                                tool_pass_speed_widget(ui, ui_context, tool_pass, pass_index)
                             });
                         });
                     });
@@ -1567,42 +1543,22 @@ fn tool_pass_colour_widget(
 /// # Arguments
 /// * `ui`: The UI to draw to.
 /// * `ui_context`: The Seance UI context.
+/// * `tool_pass`: The tool pass to draw.
 /// * `pass_index`: The index of the tool pass.
-/// * `state`: The state of this tool pass widget.
 fn tool_pass_power_widget(
     ui: &mut egui::Ui,
     ui_context: &mut UIContext,
+    tool_pass: &ToolPass,
     pass_index: usize,
-    state: &mut ToolPassWidgetState,
 ) {
-    let pen_power_str = &mut state.power_editing_text;
-    if matches!(state.editing, ToolPassWidgetEditing::Power) {
-        let text_edit = ui.add(
-            TextEdit::singleline(pen_power_str)
-                .horizontal_align(Align::RIGHT)
-                .vertical_align(Align::Center),
-        );
-
-        ui.ctx()
-            .memory_mut(|memory| memory.request_focus(text_edit.id));
-
-        if text_edit.clicked_elsewhere() {
-            let _ = ui_context.send_ui_message(UIMessage::ToolPassPowerLostFocus);
-        }
-    } else {
-        let pen_power_label = Label::new(format!("Power: {pen_power_str}")).sense(Sense::click());
-        let pen_power_widget = ui
-            .add(pen_power_label)
-            .on_hover_cursor(egui::CursorIcon::Text);
-        ui_context.add_widget(
-            pen_power_widget.id,
-            SeanceUIElement::PowerLabel { index: pass_index },
-        );
-
-        if pen_power_widget.clicked() {
-            let _ =
-                ui_context.send_ui_message(UIMessage::ToolPassPowerClicked { index: pass_index });
-        }
+    let mut power = (*tool_pass.power() as f32) / 10.0;
+    let power_slider = Slider::new(&mut power, MIN_POWER_VALUE_FLOAT..=MAX_POWER_VALUE_FLOAT);
+    ui.label("Power %");
+    if ui.add(power_slider).changed() {
+        let _ = ui_context.send_ui_message(UIMessage::ToolPassPowerChanged {
+            index: pass_index,
+            power: (power * 10.0).round() as u64,
+        });
     }
 }
 
@@ -1611,44 +1567,22 @@ fn tool_pass_power_widget(
 /// # Arguments
 /// * `ui`: The UI to draw to.
 /// * `ui_context`: The Seance UI context.
+/// * `tool_pass`: The tool pass to draw.
 /// * `pass_index`: The index of the tool pass.
-/// * `state`: The state of this tool pass widget.
 fn tool_pass_speed_widget(
     ui: &mut egui::Ui,
     ui_context: &mut UIContext,
+    tool_pass: &ToolPass,
     pass_index: usize,
-    state: &mut ToolPassWidgetState,
 ) {
-    let mut margin = Margin::default();
-    margin.right = 10;
-    let pen_speed_str = &mut state.speed_editing_text;
-    if matches!(state.editing, ToolPassWidgetEditing::Speed) {
-        let text_edit = ui.add(
-            TextEdit::singleline(pen_speed_str)
-                .horizontal_align(Align::RIGHT)
-                .vertical_align(Align::Center),
-        );
-
-        ui.ctx()
-            .memory_mut(|memory| memory.request_focus(text_edit.id));
-
-        if text_edit.clicked_elsewhere() {
-            let _ = ui_context.send_ui_message(UIMessage::ToolPassSpeedLostFocus);
-        }
-    } else {
-        let pen_speed_label = Label::new(format!("Speed: {pen_speed_str}")).sense(Sense::click());
-        let pen_speed_widget = ui
-            .add(pen_speed_label)
-            .on_hover_cursor(egui::CursorIcon::Text);
-        ui_context.add_widget(
-            pen_speed_widget.id,
-            SeanceUIElement::SpeedLabel { index: pass_index },
-        );
-
-        if pen_speed_widget.clicked() {
-            let _ =
-                ui_context.send_ui_message(UIMessage::ToolPassSpeedClicked { index: pass_index });
-        }
+    let mut speed = (*tool_pass.speed() as f32) / 10.0;
+    let speed_slider = Slider::new(&mut speed, MIN_SPEED_VALUE_FLOAT..=MAX_SPEED_VALUE_FLOAT);
+    ui.label("Speed %");
+    if ui.add(speed_slider).changed() {
+        let _ = ui_context.send_ui_message(UIMessage::ToolPassSpeedChanged {
+            index: pass_index,
+            speed: (speed * 10.0).round() as u64,
+        });
     }
 }
 
@@ -2008,6 +1942,18 @@ fn load_design(
     }
 }
 
+/// The reason that we're changing focus.
+enum FocusChangingReason {
+    /// The enter key has been pressed.
+    EnterKeyPressed,
+    /// The tab key has been pressed.
+    TabKeyPressed,
+    /// The space key has been pressed.
+    SpaceKeyPressed,
+    /// The tool pass name has lost focus e.g. due to a click.
+    ToolPassNameLostFocus,
+}
+
 /// The focus is changing from one UI element to another.
 /// Makes decisions about whether to allow the focus to change and what to do about it.
 ///
@@ -2015,36 +1961,23 @@ fn load_design(
 /// * `ctx`: The egui context.
 /// * `ui_context`: The Seance UI context.
 /// * `tool_pass_widgets_states`: The states of all of the tool pass widgets.
+/// * `reason`: The reason that focus is changing.
 fn focus_changing(
     ctx: &egui::Context,
     ui_context: &mut UIContext,
     tool_pass_widget_states: &mut Vec<ToolPassWidgetState>,
+    reason: FocusChangingReason,
 ) {
     let mut allow_move = true;
-    for (index, pen_widget) in tool_pass_widget_states.iter_mut().enumerate() {
+    for pen_widget in tool_pass_widget_states.iter_mut() {
         match pen_widget.editing {
             ToolPassWidgetEditing::None => {}
-            ToolPassWidgetEditing::Name => {}
-            ToolPassWidgetEditing::Power => {
-                if let Ok(power) = pen_widget.power_editing_text.parse::<u64>() {
-                    let _ = ui_context
-                        .send_ui_message(UIMessage::ToolPassPowerChanged { index, power });
-                } else {
-                    // TODO: Flash red
-                    allow_move = false;
-                    pen_widget.editing = ToolPassWidgetEditing::Power;
-                }
-            }
-            ToolPassWidgetEditing::Speed => {
-                if let Ok(speed) = pen_widget.speed_editing_text.parse::<u64>() {
-                    let _ = ui_context
-                        .send_ui_message(UIMessage::ToolPassSpeedChanged { index, speed });
-                } else {
-                    // TODO: Flash red
-                    allow_move = false;
-                    pen_widget.editing = ToolPassWidgetEditing::Speed;
-                }
-            }
+            ToolPassWidgetEditing::Name => match reason {
+                FocusChangingReason::SpaceKeyPressed => allow_move = false,
+                FocusChangingReason::EnterKeyPressed
+                | FocusChangingReason::TabKeyPressed
+                | FocusChangingReason::ToolPassNameLostFocus => allow_move = true,
+            },
         }
 
         if allow_move {
@@ -2060,16 +1993,6 @@ fn focus_changing(
                         SeanceUIElement::NameLabel { index } => {
                             if let Some(pass) = tool_pass_widget_states.get_mut(*index) {
                                 pass.editing = ToolPassWidgetEditing::Name;
-                            }
-                        }
-                        SeanceUIElement::PowerLabel { index } => {
-                            if let Some(pass) = tool_pass_widget_states.get_mut(*index) {
-                                pass.editing = ToolPassWidgetEditing::Power;
-                            }
-                        }
-                        SeanceUIElement::SpeedLabel { index } => {
-                            if let Some(pass) = tool_pass_widget_states.get_mut(*index) {
-                                pass.editing = ToolPassWidgetEditing::Speed;
                             }
                         }
                     }
