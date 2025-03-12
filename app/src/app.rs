@@ -994,13 +994,13 @@ fn toolbar_widget(
                         let _ = ui_context.send_ui_message(UIMessage::ShowExportToolPathSettingsDialog);
                     }
 
-                    if ui.button("Select All").clicked() {
+                    if ui.button("Enable All").clicked() {
                         for (index, _) in tool_passes.iter().enumerate() {
                             let _ = ui_context.send_ui_message(UIMessage::ToolPassEnableChanged { index, enabled: true });
                         }
                     }
 
-                    if ui.button("Deselect All").clicked() {
+                    if ui.button("Disable All").clicked() {
                         for (index, _) in tool_passes.iter().enumerate() {
                             let _ = ui_context.send_ui_message(UIMessage::ToolPassEnableChanged { index, enabled: false });
                         }
