@@ -15,8 +15,8 @@ use std::{
 };
 
 use egui::{
-    Align, Color32, FontId, Frame, Key, Label, Layout, Margin, Pos2, Rect, RichText, ScrollArea,
-    Sense, Slider, Stroke, StrokeKind, TextEdit, UiBuilder, Vec2, Visuals, WidgetText,
+    Align, Color32, DragValue, FontId, Frame, Key, Label, Layout, Margin, Pos2, Rect, RichText,
+    ScrollArea, Sense, Slider, Stroke, StrokeKind, TextEdit, UiBuilder, Vec2, Visuals, WidgetText,
 };
 use egui_dnd::{dnd, DragDropConfig};
 use egui_extras::{Size, StripBuilder};
@@ -1552,7 +1552,10 @@ fn tool_pass_power_widget(
     pass_index: usize,
 ) {
     let mut power = (*tool_pass.power() as f32) / 10.0;
-    let power_slider = Slider::new(&mut power, MIN_POWER_VALUE_FLOAT..=MAX_POWER_VALUE_FLOAT);
+    let power_slider = DragValue::new(&mut power)
+        .max_decimals(1)
+        .range(MIN_POWER_VALUE_FLOAT..=MAX_POWER_VALUE_FLOAT)
+        .clamp_existing_to_range(true);
     ui.label("Power %");
     if ui.add(power_slider).changed() {
         let _ = ui_context.send_ui_message(UIMessage::ToolPassPowerChanged {
@@ -1576,14 +1579,17 @@ fn tool_pass_speed_widget(
     pass_index: usize,
 ) {
     let mut speed = (*tool_pass.speed() as f32) / 10.0;
-    let speed_slider = Slider::new(&mut speed, MIN_SPEED_VALUE_FLOAT..=MAX_SPEED_VALUE_FLOAT);
-    ui.label("Speed %");
+    let speed_slider = DragValue::new(&mut speed)
+        .max_decimals(1)
+        .range(MIN_SPEED_VALUE_FLOAT..=MAX_SPEED_VALUE_FLOAT)
+        .clamp_existing_to_range(true);
     if ui.add(speed_slider).changed() {
         let _ = ui_context.send_ui_message(UIMessage::ToolPassSpeedChanged {
             index: pass_index,
             speed: (speed * 10.0).round() as u64,
         });
     }
+    ui.label("Speed %");
 }
 
 /// A widget for drawing the preview of a design.
