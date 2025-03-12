@@ -186,11 +186,8 @@ impl DesignPreview {
             return None;
         };
 
-        // If we ever actually zoom to 1x then the scrollbars disappear from the UI.
-        // When we then zoom in, the bars flash back into existence in a very nasty
-        // way. Therefore, we never allow the zoom level to actually return to 1.0
-        let zoomed_bounding_box_width = self.size.x * (self.zoom * 1.05);
-        let zoomed_bounding_box_height = self.size.y * (self.zoom * 1.05);
+        let zoomed_bounding_box_width = self.size.x * self.zoom;
+        let zoomed_bounding_box_height = self.size.y * self.zoom;
 
         let texture_width = zoomed_bounding_box_width.floor();
         let texture_height = zoomed_bounding_box_height.floor();
