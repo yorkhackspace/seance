@@ -108,7 +108,7 @@
 
           mkToolchain = fenixPkgs: fenixPkgs.toolchainOf {
             channel = "1.83";
-            sha256 = "sha256-e4mlaJehWBymYxJGgnbuCObVlqMlQSilZ8FljG9zPHY=";
+            sha256 = "sha256-s1RPtyvDGJaX/BisLT+ifVfuhDT1nZkZ1NcK8sbwELM=";
           };
 
           toolchain = fenixPkgs.combine [
@@ -181,7 +181,7 @@
           vulkan-validation-layers
         ];
       in with pkgs; {
-        formatter = pkgs.alejadra;
+        formatter = pkgs.alejandra;
 
         devShells.default = mkShell rec {
           inherit buildInputs nativeBuildInputs;
