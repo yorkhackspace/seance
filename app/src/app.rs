@@ -1379,6 +1379,8 @@ fn tool_pass_widget<'handle>(
                 let mut margin = Margin::default();
                 margin.left = 10;
                 margin.right = 10;
+                margin.top = 5;
+                margin.bottom = 5;
                 Frame::default().inner_margin(margin).show(ui, |ui| {
                     tool_pass_details_widget(ui, ui_context, tool_pass, pass_index, state);
                 });
