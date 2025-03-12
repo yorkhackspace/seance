@@ -15,8 +15,9 @@ use std::{
 };
 
 use egui::{
-    Align, Color32, DragValue, FontId, Frame, Key, Label, Layout, Margin, Pos2, Rect, RichText,
-    ScrollArea, Sense, Slider, Stroke, StrokeKind, TextEdit, UiBuilder, Vec2, Visuals, WidgetText,
+    Align, Checkbox, Color32, DragValue, FontId, Frame, Key, Label, Layout, Margin, Pos2, Rect,
+    RichText, ScrollArea, Sense, Slider, Stroke, StrokeKind, TextEdit, UiBuilder, Vec2, Visuals,
+    WidgetText,
 };
 use egui_dnd::{dnd, DragDropConfig};
 use egui_extras::{Size, StripBuilder};
@@ -1416,7 +1417,8 @@ fn tool_pass_details_widget(
                         strip.cell(|ui| {
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                                 let mut enabled_val = tool_pass.enabled().clone();
-                                let enable_box = ui.checkbox(&mut enabled_val, "");
+                                let checkbox = Checkbox::without_text(&mut enabled_val);
+                                let enable_box = ui.add(checkbox);
                                 if enable_box.changed() {
                                     let _ = ui_context.send_ui_message(
                                         UIMessage::ToolPassEnableChanged {
