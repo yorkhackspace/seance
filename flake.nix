@@ -155,6 +155,8 @@
         nativeBuildInputs = with pkgs; [
           rustToolchain
           typos
+
+          dpkg
         ];
         buildInputs = with pkgs; [
           pkg-config

@@ -1,0 +1,2 @@
+cupsd.conf etc/cups/cupsd.conf
+printers.conf etc/cups/printers.conf

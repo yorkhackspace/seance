@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+
+# Needed for the USB -> Parallel cable to work
+modprobe usblp
+# We've dumped a bunch of config in /etc/cups so we should
+# make cups restart and reload said config.
+systemctl restart cups
+
+# This can fail if planchette already exists.
+# We could be smarter about checking this if, dear reader,
+# one were feeling enthusiastic about it
+useradd -G lpadmin planchette || true
