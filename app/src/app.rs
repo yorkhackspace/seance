@@ -1668,26 +1668,16 @@ fn tool_pass_details_widget(
         .vertical(|mut strip| {
             strip.cell(|ui| {
                 StripBuilder::new(ui)
-                    .sizes(Size::remainder(), 3)
+                    .sizes(Size::remainder(), 2)
                     .horizontal(|mut strip| {
                         strip.cell(|ui| {
                             tool_pass_name_widget(ui, ui_context, tool_pass, pass_index, state)
                         });
                         strip.cell(|ui| {
-                            tool_pass_colour_widget(ui, ui_context, tool_pass, pass_index, state)
-                        });
-                        strip.cell(|ui| {
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                                let mut enabled_val = *tool_pass.enabled();
-                                let checkbox = Checkbox::without_text(&mut enabled_val);
-                                let enable_box = ui.add(checkbox);
-                                if enable_box.changed() {
-                                    ui_context.send_ui_message(UIMessage::ToolPassEnableChanged {
-                                        index: pass_index,
-                                        enabled: enabled_val,
-                                    });
-                                }
-                                ui.label("Enabled");
+                                tool_pass_colour_widget(
+                                    ui, ui_context, tool_pass, pass_index, state,
+                                );
                             });
                         });
                     });
@@ -1697,10 +1687,20 @@ fn tool_pass_details_widget(
                     .sizes(Size::remainder(), 2)
                     .horizontal(|mut strip| {
                         strip.cell(|ui| {
-                            tool_pass_power_widget(ui, ui_context, tool_pass, pass_index)
+                            ui.label("Enabled");
+                            let mut enabled_val = *tool_pass.enabled();
+                            let checkbox = Checkbox::without_text(&mut enabled_val);
+                            let enable_box = ui.add(checkbox);
+                            if enable_box.changed() {
+                                ui_context.send_ui_message(UIMessage::ToolPassEnableChanged {
+                                    index: pass_index,
+                                    enabled: enabled_val,
+                                });
+                            }
                         });
                         strip.cell(|ui| {
                             ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                                tool_pass_power_widget(ui, ui_context, tool_pass, pass_index);
                                 tool_pass_speed_widget(ui, ui_context, tool_pass, pass_index)
                             });
                         });
@@ -1776,67 +1776,54 @@ fn tool_pass_colour_widget(
     pass_index: usize,
     state: &mut ToolPassWidgetState,
 ) {
-    StripBuilder::new(ui)
-        .sizes(Size::remainder(), 2)
-        .horizontal(|mut strip| {
-            // Colour Hex-code
-            strip.cell(|ui| {
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    let [r, g, b] = tool_pass.colour();
-                    let colour_u32: u64 = ((*r as u64) << 16) + ((*g as u64) << 8) + (*b as u64);
-                    if let ToolPassWidgetEditing::Colour { value } = &mut state.editing {
-                        let text_edit = ui.add(
-                            TextEdit::singleline(value)
-                                .horizontal_align(Align::RIGHT)
-                                .vertical_align(Align::Center),
-                        );
-
-                        ui.ctx()
-                            .memory_mut(|memory| memory.request_focus(text_edit.id));
-
-                        if text_edit.changed() || text_edit.lost_focus() {
-                            if let Ok(parsed_colour) =
-                                HexColor::from_str(value).or(HexColor::from_str_without_hash(value))
-                            {
-                                ui_context.send_ui_message(UIMessage::ToolPassColourChanged {
-                                    index: pass_index,
-                                    colour: [
-                                        parsed_colour.color().r(),
-                                        parsed_colour.color().g(),
-                                        parsed_colour.color().b(),
-                                    ],
-                                });
-                            };
-                        }
-
-                        if text_edit.clicked_elsewhere() {
-                            ui_context.send_ui_message(UIMessage::ToolPassColourLostFocus);
-                        }
-                    } else {
-                        let colour_label = ui.label(format!("#{colour_u32:06X}"));
-                        ui_context.add_widget(
-                            colour_label.id,
-                            SeanceUIElement::ColourLabel { index: pass_index },
-                        );
-                        if colour_label.clicked() {
-                            ui_context.send_ui_message(UIMessage::ToolPassColourClicked {
-                                index: pass_index,
-                            });
-                        }
-                    }
-                });
-            });
-            // Colour Swatch
-            strip.cell(|ui| {
-                let mut colour = *tool_pass.colour();
-                if ui.color_edit_button_srgb(&mut colour).changed() {
-                    ui_context.send_ui_message(UIMessage::ToolPassColourChanged {
-                        index: pass_index,
-                        colour,
-                    });
-                };
-            });
+    let mut colour = *tool_pass.colour();
+    if ui.color_edit_button_srgb(&mut colour).changed() {
+        ui_context.send_ui_message(UIMessage::ToolPassColourChanged {
+            index: pass_index,
+            colour,
         });
+    };
+
+    let [r, g, b] = tool_pass.colour();
+    let colour_u32: u64 = ((*r as u64) << 16) + ((*g as u64) << 8) + (*b as u64);
+    if let ToolPassWidgetEditing::Colour { value } = &mut state.editing {
+        let text_edit = ui.add(
+            TextEdit::singleline(value)
+                .horizontal_align(Align::RIGHT)
+                .vertical_align(Align::Center),
+        );
+
+        ui.ctx()
+            .memory_mut(|memory| memory.request_focus(text_edit.id));
+
+        if text_edit.changed() || text_edit.lost_focus() {
+            if let Ok(parsed_colour) =
+                HexColor::from_str(value).or(HexColor::from_str_without_hash(value))
+            {
+                ui_context.send_ui_message(UIMessage::ToolPassColourChanged {
+                    index: pass_index,
+                    colour: [
+                        parsed_colour.color().r(),
+                        parsed_colour.color().g(),
+                        parsed_colour.color().b(),
+                    ],
+                });
+            };
+        }
+
+        if text_edit.clicked_elsewhere() {
+            ui_context.send_ui_message(UIMessage::ToolPassColourLostFocus);
+        }
+    } else {
+        let colour_label = ui.label(format!("#{colour_u32:06X}"));
+        ui_context.add_widget(
+            colour_label.id,
+            SeanceUIElement::ColourLabel { index: pass_index },
+        );
+        if colour_label.clicked() {
+            ui_context.send_ui_message(UIMessage::ToolPassColourClicked { index: pass_index });
+        }
+    }
 }
 
 /// Draws the editable power of a tool pass.
@@ -1857,13 +1844,13 @@ fn tool_pass_power_widget(
         .max_decimals(1)
         .range(MIN_POWER_VALUE_FLOAT..=MAX_POWER_VALUE_FLOAT)
         .clamp_existing_to_range(true);
-    ui.label("Power %");
     if ui.add(power_slider).changed() {
         ui_context.send_ui_message(UIMessage::ToolPassPowerChanged {
             index: pass_index,
             power: (power * 10.0).round() as u64,
         });
     }
+    ui.label("Power %");
 }
 
 /// Draws the editable speed of a tool pass.
