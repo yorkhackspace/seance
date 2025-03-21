@@ -11,14 +11,15 @@ use std::{
     fs,
     hash::{self, DefaultHasher, Hash, Hasher},
     path::PathBuf,
+    str::FromStr,
     sync::{Arc, Mutex, RwLock},
     time::Duration,
 };
 
 use egui::{
-    Align, Checkbox, Color32, DragValue, FontId, Frame, Key, Label, Layout, Margin, Pos2, Rect,
-    RichText, ScrollArea, Sense, Slider, Stroke, StrokeKind, TextEdit, UiBuilder, Vec2, Visuals,
-    WidgetText,
+    ecolor::HexColor, Align, Checkbox, Color32, DragValue, FontId, Frame, Key, Label, Layout,
+    Margin, Pos2, Rect, RichText, ScrollArea, Sense, Slider, Stroke, StrokeKind, TextEdit,
+    UiBuilder, Vec2, Visuals, WidgetText,
 };
 use egui_dnd::{dnd, DragDropConfig};
 use egui_extras::{Size, StripBuilder};
@@ -408,6 +409,27 @@ impl Seance {
                         pass.set_speed(speed);
                     }
                 }
+                UIMessage::ToolPassColourClicked { index } => {
+                    if let Some(pass) = self.passes.get(index) {
+                        if let Some(state) = self.tool_pass_widget_states.get_mut(index) {
+                            let [r, g, b] = pass.colour();
+                            let colour_u32: u64 =
+                                ((*r as u64) << 16) + ((*g as u64) << 8) + (*b as u64);
+                            state.editing = ToolPassWidgetEditing::Colour {
+                                value: format!("#{colour_u32:06X}"),
+                            };
+                        }
+                    }
+                }
+                UIMessage::ToolPassColourLostFocus => {
+                    focus_changing(
+                        ctx,
+                        &mut self.ui_context,
+                        &mut self.tool_pass_widget_states,
+                        &self.passes,
+                        FocusChangingReason::ToolPassColourLostFocus,
+                    );
+                }
                 UIMessage::ToolPassColourChanged { index, colour } => {
                     if let Some(pass) = self.passes.get_mut(index) {
                         pass.set_colour(colour);
@@ -423,6 +445,7 @@ impl Seance {
                         ctx,
                         &mut self.ui_context,
                         &mut self.tool_pass_widget_states,
+                        &self.passes,
                         FocusChangingReason::ToolPassNameLostFocus,
                     );
                 }
@@ -470,6 +493,7 @@ impl Seance {
                         ctx,
                         &mut self.ui_context,
                         &mut self.tool_pass_widget_states,
+                        &self.passes,
                         FocusChangingReason::EnterKeyPressed,
                     );
                 }
@@ -478,6 +502,7 @@ impl Seance {
                         ctx,
                         &mut self.ui_context,
                         &mut self.tool_pass_widget_states,
+                        &self.passes,
                         FocusChangingReason::TabKeyPressed,
                     );
                 }
@@ -486,6 +511,7 @@ impl Seance {
                         ctx,
                         &mut self.ui_context,
                         &mut self.tool_pass_widget_states,
+                        &self.passes,
                         FocusChangingReason::SpaceKeyPressed,
                     );
                 }
@@ -703,6 +729,13 @@ enum UIMessage {
         /// The new speed of the tool pass.
         speed: u64,
     },
+    /// The colour label has been clicked.
+    ToolPassColourClicked {
+        /// The index of the tool pass that has been clicked.
+        index: usize,
+    },
+    /// The colour of a tool pass lost focus.
+    ToolPassColourLostFocus,
     /// The colour associated with a tool pass has changed.
     ToolPassColourChanged {
         /// The index of the tool pass that has changed.
@@ -763,6 +796,11 @@ enum SeanceUIElement {
     /// The label for a tool pass name.
     NameLabel {
         /// The index of the tool pass for which this is the name label.
+        index: usize,
+    },
+    /// The label for the colour value.
+    ColourLabel {
+        /// The index of the tool pass for which this is the colour label.
         index: usize,
     },
 }
@@ -1427,6 +1465,11 @@ enum ToolPassWidgetEditing {
     None,
     /// The name is being edited.
     Name,
+    /// Tool pass colour is being edited.
+    Colour {
+        /// The current colour value.
+        value: String,
+    },
 }
 
 /// A single tool pass widget.
@@ -1500,7 +1543,7 @@ fn tool_pass_details_widget(
                             tool_pass_name_widget(ui, ui_context, tool_pass, pass_index, state)
                         });
                         strip.cell(|ui| {
-                            tool_pass_colour_widget(ui, ui_context, tool_pass, pass_index)
+                            tool_pass_colour_widget(ui, ui_context, tool_pass, pass_index, state)
                         });
                         strip.cell(|ui| {
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -1600,6 +1643,7 @@ fn tool_pass_colour_widget(
     ui_context: &mut UIContext,
     tool_pass: &ToolPass,
     pass_index: usize,
+    state: &mut ToolPassWidgetState,
 ) {
     StripBuilder::new(ui)
         .sizes(Size::remainder(), 2)
@@ -1609,7 +1653,46 @@ fn tool_pass_colour_widget(
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     let [r, g, b] = tool_pass.colour();
                     let colour_u32: u64 = ((*r as u64) << 16) + ((*g as u64) << 8) + (*b as u64);
-                    ui.label(format!("#{colour_u32:06X}"));
+                    if let ToolPassWidgetEditing::Colour { value } = &mut state.editing {
+                        let text_edit = ui.add(
+                            TextEdit::singleline(value)
+                                .horizontal_align(Align::RIGHT)
+                                .vertical_align(Align::Center),
+                        );
+
+                        ui.ctx()
+                            .memory_mut(|memory| memory.request_focus(text_edit.id));
+
+                        if text_edit.changed() || text_edit.lost_focus() {
+                            if let Ok(parsed_colour) =
+                                HexColor::from_str(value).or(HexColor::from_str_without_hash(value))
+                            {
+                                ui_context.send_ui_message(UIMessage::ToolPassColourChanged {
+                                    index: pass_index,
+                                    colour: [
+                                        parsed_colour.color().r(),
+                                        parsed_colour.color().g(),
+                                        parsed_colour.color().b(),
+                                    ],
+                                });
+                            };
+                        }
+
+                        if text_edit.clicked_elsewhere() {
+                            ui_context.send_ui_message(UIMessage::ToolPassColourLostFocus);
+                        }
+                    } else {
+                        let colour_label = ui.label(format!("#{colour_u32:06X}"));
+                        ui_context.add_widget(
+                            colour_label.id,
+                            SeanceUIElement::ColourLabel { index: pass_index },
+                        );
+                        if colour_label.clicked() {
+                            ui_context.send_ui_message(UIMessage::ToolPassColourClicked {
+                                index: pass_index,
+                            });
+                        }
+                    }
                 });
             });
             // Colour Swatch
@@ -1996,6 +2079,8 @@ enum FocusChangingReason {
     SpaceKeyPressed,
     /// The tool pass name has lost focus e.g. due to a click.
     ToolPassNameLostFocus,
+    /// The tool pass colour has lost focus e.g. due to a click.
+    ToolPassColourLostFocus,
 }
 
 /// The focus is changing from one UI element to another.
@@ -2010,17 +2095,19 @@ fn focus_changing(
     ctx: &egui::Context,
     ui_context: &mut UIContext,
     tool_pass_widget_states: &mut [ToolPassWidgetState],
+    tool_passes: &[ToolPass],
     reason: FocusChangingReason,
 ) {
     let mut allow_move = true;
     for pen_widget in tool_pass_widget_states.iter_mut() {
         match pen_widget.editing {
             ToolPassWidgetEditing::None => {}
-            ToolPassWidgetEditing::Name => match reason {
+            ToolPassWidgetEditing::Name | ToolPassWidgetEditing::Colour { .. } => match reason {
                 FocusChangingReason::SpaceKeyPressed => allow_move = false,
                 FocusChangingReason::EnterKeyPressed
                 | FocusChangingReason::TabKeyPressed
-                | FocusChangingReason::ToolPassNameLostFocus => allow_move = true,
+                | FocusChangingReason::ToolPassNameLostFocus
+                | FocusChangingReason::ToolPassColourLostFocus => allow_move = true,
             },
         }
 
@@ -2037,6 +2124,18 @@ fn focus_changing(
                         SeanceUIElement::NameLabel { index } => {
                             if let Some(pass) = tool_pass_widget_states.get_mut(*index) {
                                 pass.editing = ToolPassWidgetEditing::Name;
+                            }
+                        }
+                        SeanceUIElement::ColourLabel { index } => {
+                            if let Some(state) = tool_pass_widget_states.get_mut(*index) {
+                                if let Some(pass) = tool_passes.get(*index) {
+                                    let [r, g, b] = pass.colour();
+                                    let colour_u32: u64 =
+                                        ((*r as u64) << 16) + ((*g as u64) << 8) + (*b as u64);
+                                    state.editing = ToolPassWidgetEditing::Colour {
+                                        value: format!("#{colour_u32:06X}"),
+                                    };
+                                }
                             }
                         }
                     }
