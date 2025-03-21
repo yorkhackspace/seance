@@ -3,6 +3,7 @@
 //! Contains the entry point for the egui APP.
 
 mod preview;
+use oneshot::TryRecvError;
 pub use preview::{render_task, RenderRequest};
 use reqwest::StatusCode;
 
@@ -68,6 +69,31 @@ struct PersistentStorage {
     design_move_step_mm: f32,
 }
 
+/// A oneshot receiver that will receive the result of uploading a design to a
+/// Planchette server.
+type PlanchetteUploadResultReceiver = oneshot::Receiver<Result<(), PlanchetteError>>;
+
+/// The status of an ongoing upload to a Planchette server, if any.
+enum PlanchetteUploadStatus {
+    /// No ongoing upload.
+    None,
+    /// Ongoing upload awaiting result.
+    Uploading {
+        /// Channel on which the result will be received.
+        receiver: PlanchetteUploadResultReceiver,
+    },
+    /// An upload failed.
+    Failed {
+        /// When the upload failed.
+        at: std::time::Instant,
+    },
+    /// An upload succeeded.
+    Succeeded {
+        /// When the upload succeeded.
+        at: std::time::Instant,
+    },
+}
+
 /// The Seance UI app.
 pub struct Seance {
     /// Whether the UI should be dark mode.
@@ -107,6 +133,8 @@ pub struct Seance {
     design_preview_image: Option<DesignPreview>,
     /// The settings dialog, if it is currently open.
     settings_dialog: Option<SettingsDialogState>,
+    /// Current state of uploading a design to a Planchette server.
+    planchette_upload_status: PlanchetteUploadStatus,
 }
 
 /// Context that we're drawing into.
@@ -253,6 +281,7 @@ impl Seance {
                 current_error: None,
                 design_preview_image: None,
                 settings_dialog: None,
+                planchette_upload_status: PlanchetteUploadStatus::None,
             };
         }
 
@@ -281,6 +310,7 @@ impl Seance {
             current_error: None,
             design_preview_image: None,
             settings_dialog: None,
+            planchette_upload_status: PlanchetteUploadStatus::None,
         }
     }
 
@@ -488,6 +518,11 @@ impl Seance {
                         preview.set_design_offset(Default::default(), &self.design_file);
                     }
                 }
+                UIMessage::PlanchetteUploadStarted { receiver } => {
+                    // If we've started a new upload then we will replace the old upload as
+                    // it is now irrelevant.
+                    self.planchette_upload_status = PlanchetteUploadStatus::Uploading { receiver };
+                }
                 UIMessage::EnterKeyPressed => {
                     focus_changing(
                         ctx,
@@ -549,6 +584,43 @@ impl eframe::App for Seance {
             settings_dialog(ctx, &mut self.ui_context, settings);
         }
 
+        match &mut self.planchette_upload_status {
+            PlanchetteUploadStatus::None => {}
+            PlanchetteUploadStatus::Uploading { receiver } => match receiver.try_recv() {
+                Ok(Ok(_)) => {
+                    self.planchette_upload_status = PlanchetteUploadStatus::Succeeded {
+                        at: std::time::Instant::now(),
+                    }
+                }
+                Ok(Err(err)) => {
+                    handle_planchette_error(&mut self.ui_context, err);
+                    self.planchette_upload_status = PlanchetteUploadStatus::Failed {
+                        at: std::time::Instant::now(),
+                    };
+                }
+                Err(TryRecvError::Disconnected) => {
+                    self.ui_context.send_ui_message(UIMessage::ShowError {
+                        error: "Failed to confirm status of design upload".to_string(),
+                        details: Some("Sending half of response channel was closed".to_string()),
+                    });
+                    self.planchette_upload_status = PlanchetteUploadStatus::Failed {
+                        at: std::time::Instant::now(),
+                    };
+                }
+                Err(TryRecvError::Empty) => {}
+            },
+            PlanchetteUploadStatus::Failed { at } => {
+                if at.elapsed() >= Duration::from_secs(5) {
+                    self.planchette_upload_status = PlanchetteUploadStatus::None;
+                }
+            }
+            PlanchetteUploadStatus::Succeeded { at } => {
+                if at.elapsed() >= Duration::from_secs(5) {
+                    self.planchette_upload_status = PlanchetteUploadStatus::None;
+                }
+            }
+        }
+
         self.ui_context.prepare_for_repaint();
 
         // Slow down key presses to make typing bearable.
@@ -608,6 +680,7 @@ impl eframe::App for Seance {
                                     &self.passes,
                                     &self.planchette_url,
                                     &offset,
+                                    &self.planchette_upload_status,
                                 );
                             });
                     });
@@ -783,6 +856,11 @@ enum UIMessage {
     },
     /// Reset the design to align with the top-left edge.
     ResetDesignPosition,
+    /// A design has been sent to Planchette, we're waiting on a response.
+    PlanchetteUploadStarted {
+        /// Channel on which the response will be received.
+        receiver: PlanchetteUploadResultReceiver,
+    },
     /// The enter key has been pressed.
     EnterKeyPressed,
     /// The tab key has been pressed.
@@ -1020,6 +1098,7 @@ impl FileDialog {
 /// * `tool_passes`: The current passes of the tool.
 /// * `planchette_url`: The URL of the planchette server to send jobs to.
 /// * `offset`: How much to move the design by relative to its starting position, in mm, where +x is more right and +y is more down.
+/// * `planchette_upload_status`: The status of an ongoing upload to a Planchette server, if any.
 ///
 /// # Returns
 /// An [`egui::Response`].
@@ -1030,6 +1109,7 @@ fn toolbar_widget(
     tool_passes: &[ToolPass],
     planchette_url: &reqwest::Url,
     offset: &DesignOffset,
+    planchette_upload_status: &PlanchetteUploadStatus,
 ) -> egui::Response {
     StripBuilder::new(ui)
         .sizes(Size::remainder(), 2)
@@ -1070,15 +1150,41 @@ fn toolbar_widget(
                         let design_lock = design_file.read();
                         matches!(design_lock.map(|design| design.is_some()), Ok(true))
                     };
+                    let enable_upload_button = design_valid && matches!(planchette_upload_status, PlanchetteUploadStatus::None);
                     let button = egui::Button::new("Send to Laser");
-                    if ui.add_enabled(design_valid, button).on_hover_text(hover_text).clicked() {
+                    if ui.add_enabled(enable_upload_button, button).on_hover_text(hover_text).clicked() {
                         if let Ok(design_lock) = design_file.read() {
                             if let Some((file, _, _)) = &*design_lock {
-                                if let Err(err) = send_job_to_planchette(planchette_url, file, tool_passes, offset) {
-                                    handle_planchette_error( ui_context, err);
-                                }
+                                let receiver = send_job_to_planchette(planchette_url, file, tool_passes, offset);
+                                ui_context.send_ui_message(UIMessage::PlanchetteUploadStarted { receiver });
                             }
                         }
+                    }
+
+                    match planchette_upload_status {
+                        PlanchetteUploadStatus::None => {},
+                        PlanchetteUploadStatus::Uploading { .. } => {
+                            ui.spinner();
+                        },
+                        PlanchetteUploadStatus::Failed { .. } => {
+                            let text = RichText::new("❌")
+                                .color(Color32::DARK_RED)
+                                .font(FontId {
+                                    size: 11.0,
+                                    family: egui::FontFamily::Monospace,
+                                });
+                            ui.label(text);
+                        },
+                        PlanchetteUploadStatus::Succeeded { .. } => {
+                            // Check mark:
+                            let text = RichText::new("✅")
+                                .color(Color32::DARK_GREEN)
+                                .font(FontId {
+                                    size: 11.0,
+                                    family: egui::FontFamily::Monospace,
+                                });
+                            ui.label(text);
+                        },
                     }
                 });
             });
@@ -1111,27 +1217,52 @@ enum PlanchetteError {
 /// * `offset`: The offset to apply to the design, relative to the top-left corner.
 ///
 /// # Returns
-/// `Ok(())` if the design has successfully been sent all the way to the the laser cutter.
-///
-/// # Errors
-/// A [`PlanchetteError`] will be provided describing what went wrong.
+/// A oneshot channel that will receive a message when the request has been handled by the
+/// Planchette server.
 fn send_job_to_planchette(
     planchette_url: &reqwest::Url,
     design_file: &DesignFile,
     tool_passes: &[ToolPass],
     offset: &DesignOffset,
-) -> Result<(), PlanchetteError> {
-    let client = reqwest::blocking::Client::new();
-    let url = planchette_url
-        .join("/jobs")
-        .map_err(|err| PlanchetteError::FailedToCreateRequest(err.to_string()))?;
+) -> PlanchetteUploadResultReceiver {
+    let (tx, rx) = oneshot::channel::<Result<(), PlanchetteError>>();
 
+    let planchette_url = planchette_url.clone();
     let job = PrintJob {
         design_file: design_file.bytes.clone(),
         file_name: design_file.name.clone(),
         tool_passes: tool_passes.to_vec(),
         offset: offset.clone(),
     };
+
+    std::thread::spawn(move || {
+        let result = send_job_inner(planchette_url, job);
+        let _ = tx.send(result);
+    });
+
+    rx
+}
+
+/// Send a job to Planchette.
+/// This should be called outside of the UI thread as it could block for significant time.
+///
+/// # Arguments
+/// * `planchette_url`: The URL of the Planchette server to send designs to. This is the
+///   "root" URL, e.g. `http://ouija.yhs` as opposed to `http://ouija.yhs/jobs`. The appropriate
+///   paths will be appended to the provided URL when constructing requests to send to the server.
+/// * `job`: The [`PrintJob`] to send to the Planchette server.
+///
+/// # Returns
+/// `Ok(())` if the design has successfully been sent all the way to the the laser cutter.
+///
+/// # Errors
+/// A [`PlanchetteError`] will be provided describing what went wrong.
+fn send_job_inner(planchette_url: reqwest::Url, job: PrintJob) -> Result<(), PlanchetteError> {
+    let client = reqwest::blocking::Client::new();
+    let url = planchette_url
+        .join("/jobs")
+        .map_err(|err| PlanchetteError::FailedToCreateRequest(err.to_string()))?;
+
     let job_str = serde_json::to_string(&job)
         .map_err(|err| PlanchetteError::FailedToEncodeRequest(err.to_string()))?;
 
