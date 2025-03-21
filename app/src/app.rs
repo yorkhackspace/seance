@@ -4,6 +4,7 @@
 
 mod preview;
 pub use preview::{render_task, RenderRequest};
+use reqwest::StatusCode;
 
 use std::{
     collections::HashMap,
@@ -23,15 +24,20 @@ use egui_dnd::{dnd, DragDropConfig};
 use egui_extras::{Size, StripBuilder};
 use preview::{DesignPreview, MAX_ZOOM_LEVEL, MIN_ZOOM_LEVEL};
 
-use seance::{
-    cut_file, default_passes,
-    svg::{parse_svg, SVG_UNITS_PER_MM},
-    DesignFile, PrintDevice, SendToDeviceError, ToolPass, BED_HEIGHT_MM, BED_WIDTH_MM,
+use planchette::{
+    seance::{
+        default_passes,
+        svg::{parse_svg, SVG_UNITS_PER_MM},
+        DesignFile, DesignOffset, ToolPass, BED_HEIGHT_MM, BED_WIDTH_MM,
+    },
+    PrintJob,
 };
 
 /// `DesignFile` with a hash and original path attached.
-type DesignWithMeta = (seance::DesignFile, u64, PathBuf);
+type DesignWithMeta = (planchette::seance::DesignFile, u64, PathBuf);
 
+/// Default URL of the Planchette server to send jobs to.
+const DEFAULT_PLANCHETTE_URL: &str = "http://ouija.yhs";
 /// The minimum amount that a design can be moved by.
 const MINIMUM_DEFAULT_DESIGN_MOVE_STEP_MM: f32 = 0.1;
 /// The default amount that designs are moved by.
@@ -48,9 +54,6 @@ const MIN_SPEED_VALUE_FLOAT: f32 = 0.0;
 /// Maximum speed value that can be set, as an integer value.
 const MAX_SPEED_VALUE_FLOAT: f32 = 100.0;
 
-#[cfg(target_os = "windows")]
-use crate::USBPort;
-
 /// Data that is saved between uses of Seance.
 #[derive(serde::Deserialize, serde::Serialize)]
 struct PersistentStorage {
@@ -58,8 +61,8 @@ struct PersistentStorage {
     dark_mode: bool,
     /// The tool passes to run on the machine.
     passes: Vec<ToolPass>,
-    /// The print device configuration.
-    print_device: PrintDevice,
+    /// The URL of the planchette server to send jobs to.
+    planchette_url: String,
     /// How much to move the design by each time a movement button is pressed.
     design_move_step_mm: f32,
 }
@@ -70,8 +73,8 @@ pub struct Seance {
     dark_mode: bool,
     /// The tool passes to run on the machine.
     passes: Vec<ToolPass>,
-    /// The print device configuration.
-    print_device: PrintDevice,
+    /// The URL of the planchette server to send jobs to.
+    planchette_url: reqwest::Url,
 
     /// The currently open design file, if any.
     design_file: Arc<RwLock<Option<DesignWithMeta>>>,
@@ -170,20 +173,20 @@ impl UIContext {
 
 /// The state of the settings dialog. Data here is ephemiral and must explicitly be saved when required.
 struct SettingsDialogState {
-    /// The device that we will be using to "print" the design.
-    print_device: PrintDevice,
+    /// The URL of the planchette server to send jobs to.
+    planchette_url: String,
 }
 
 impl SettingsDialogState {
     /// Creates a new [`SettingsDialogState`].
     ///
     /// # Arguments
-    /// * `print_device`: The device to print to.
+    /// * `print_device`: The URL of the planchette server to send jobs to.
     ///
     /// # Returns
     /// A new [`SettingsDialogState`].
-    fn new(print_device: PrintDevice) -> Self {
-        Self { print_device }
+    fn new(planchette_url: String) -> Self {
+        Self { planchette_url }
     }
 }
 
@@ -213,7 +216,7 @@ impl Seance {
                 .unwrap_or(PersistentStorage {
                     dark_mode: cc.egui_ctx.style().visuals.dark_mode,
                     passes: default_pens,
-                    print_device: PrintDevice::default(),
+                    planchette_url: DEFAULT_PLANCHETTE_URL.to_string(),
                     design_move_step_mm: DEFAULT_DESIGN_MOVE_STEP_MM,
                 });
             if seance_storage.dark_mode {
@@ -231,7 +234,10 @@ impl Seance {
             return Seance {
                 dark_mode: seance_storage.dark_mode,
                 passes: seance_storage.passes,
-                print_device: seance_storage.print_device,
+                planchette_url: reqwest::Url::parse(&seance_storage.planchette_url).unwrap_or(
+                    reqwest::Url::parse(DEFAULT_PLANCHETTE_URL)
+                        .expect("Default URL is a valid URL"),
+                ),
 
                 design_file: Default::default(),
                 ui_message_rx,
@@ -257,7 +263,8 @@ impl Seance {
         Seance {
             dark_mode: cc.egui_ctx.style().visuals.dark_mode,
             passes: default_pens,
-            print_device: PrintDevice::default(),
+            planchette_url: reqwest::Url::parse(DEFAULT_PLANCHETTE_URL)
+                .expect("Default URL is a valid URL"),
 
             design_file: Default::default(),
             ui_message_rx,
@@ -351,16 +358,19 @@ impl Seance {
                     let _ = self.current_error.take();
                 }
                 UIMessage::ShowSettingsDialog => {
-                    self.settings_dialog = Some(SettingsDialogState::new(self.print_device.clone()))
+                    self.settings_dialog =
+                        Some(SettingsDialogState::new(self.planchette_url.to_string()))
                 }
-                UIMessage::PrinterSettingsChanged { printer } => {
+                UIMessage::PrinterSettingsChanged { planchette_url } => {
                     if let Some(dialog) = &mut self.settings_dialog {
-                        dialog.print_device = printer;
+                        dialog.planchette_url = planchette_url;
                     }
                 }
                 UIMessage::SaveSettings => {
                     if let Some(dialog) = &self.settings_dialog {
-                        self.print_device = dialog.print_device.clone();
+                        if let Ok(url) = reqwest::Url::parse(&dialog.planchette_url) {
+                            self.planchette_url = url;
+                        }
                     }
                 }
                 UIMessage::CloseSettingsDialog => {
@@ -492,7 +502,7 @@ impl eframe::App for Seance {
             &PersistentStorage {
                 dark_mode: self.dark_mode,
                 passes: self.passes.clone(),
-                print_device: self.print_device.clone(),
+                planchette_url: self.planchette_url.to_string(),
                 design_move_step_mm: self.design_move_step_mm,
             },
         );
@@ -558,18 +568,20 @@ impl eframe::App for Seance {
                                 bottom: ui.style().spacing.menu_margin.bottom,
                             })
                             .show(ui, |ui| {
+                                let offset = self
+                                    .design_preview_image
+                                    .as_ref()
+                                    .map(|preview| preview.get_design_offset())
+                                    .cloned()
+                                    .unwrap_or_default();
+
                                 toolbar_widget(
                                     ui,
                                     &mut self.ui_context,
                                     &self.design_file,
                                     &self.passes,
-                                    &self.print_device,
-                                    &self
-                                        .design_preview_image
-                                        .as_ref()
-                                        .map(|preview| preview.get_design_offset())
-                                        .cloned()
-                                        .unwrap_or_default(),
+                                    &self.planchette_url,
+                                    &offset,
                                 );
                             });
                     });
@@ -651,8 +663,8 @@ enum UIMessage {
     /// The printer settings have changed.
     /// This only affects the state of the settings dialog, it does not save the settings.
     PrinterSettingsChanged {
-        /// The device we should use to as our printer-like device.
-        printer: PrintDevice,
+        /// URL of the Planchette server to send jobs to.
+        planchette_url: String,
     },
     /// The current state of the settings dialog should be applied to the app state.
     SaveSettings,
@@ -786,8 +798,8 @@ impl DesignMoveDirection {
     ///
     /// # Returns
     /// A new offset, in mm.
-    pub fn apply(&self, current_offset: &egui::Vec2, step_mm: f32) -> egui::Vec2 {
-        let mut offset = *current_offset;
+    pub fn apply(&self, current_offset: &DesignOffset, step_mm: f32) -> DesignOffset {
+        let mut offset = current_offset.clone();
         match self {
             DesignMoveDirection::UpAndLeft => {
                 let step_each_side = step_mm / (2.0f32.sqrt());
@@ -968,7 +980,7 @@ impl FileDialog {
 /// * `ui_context`: The Seance UI context.
 /// * `design_file`: The currently loaded design file, if any.
 /// * `tool_passes`: The current passes of the tool.
-/// * `print_device`: The device to use as our "printer".
+/// * `planchette_url`: The URL of the planchette server to send jobs to.
 /// * `offset`: How much to move the design by relative to its starting position, in mm, where +x is more right and +y is more down.
 ///
 /// # Returns
@@ -977,9 +989,9 @@ fn toolbar_widget(
     ui: &mut egui::Ui,
     ui_context: &mut UIContext,
     design_file: &Arc<RwLock<Option<DesignWithMeta>>>,
-    tool_passes: &Vec<ToolPass>,
-    print_device: &PrintDevice,
-    offset: &Vec2,
+    tool_passes: &[ToolPass],
+    planchette_url: &reqwest::Url,
+    offset: &DesignOffset,
 ) -> egui::Response {
     StripBuilder::new(ui)
         .sizes(Size::remainder(), 2)
@@ -1014,17 +1026,18 @@ fn toolbar_widget(
 
             strip.cell(|ui| {
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    let hover_text = if print_device.is_valid() {
-                        "Sends your design to the laser cutter. You will need to press Start on the laser cutter after sending."
-                    } else {
-                        "No valid laser cutter has been configured, please configure in settings. Note: This button may be disabled due to being unable to access the configured device."
+                    let hover_text = "Sends your design to the laser cutter. You will need to press Start on the laser cutter after sending.";
+
+                    let design_valid = {
+                        let design_lock = design_file.read();
+                        matches!(design_lock.map(|design| design.is_some()), Ok(true))
                     };
                     let button = egui::Button::new("Send to Laser");
-                    if ui.add_enabled(print_device.is_valid(), button).on_hover_text(hover_text).clicked() {
+                    if ui.add_enabled(design_valid, button).on_hover_text(hover_text).clicked() {
                         if let Ok(design_lock) = design_file.read() {
-                            if let Some(file) = &*design_lock {
-                                if let Err(err) = cut_file(&file.0, tool_passes, print_device, (offset.x, offset.y)) {
-                                    handle_cut_file_error( ui_context, err);
+                            if let Some((file, _, _)) = &*design_lock {
+                                if let Err(err) = send_job_to_planchette(planchette_url, file, tool_passes, offset) {
+                                    handle_planchette_error( ui_context, err);
                                 }
                             }
                         }
@@ -1034,29 +1047,97 @@ fn toolbar_widget(
         })
 }
 
+/// Errors that can occur when communicating with Planchette.
+#[derive(Debug)]
+enum PlanchetteError {
+    /// We were unable to construct the URL we want to send the request to.
+    FailedToCreateRequest(String),
+    /// We failed to serialize the request body.
+    FailedToEncodeRequest(String),
+    /// Sending the request to the Planchette server failed.
+    FailedToSendRequest(String),
+    /// The server informed us that our request was bad and we should feel bad.
+    BadRequest(String),
+    /// Hah! We've caught the server misbehaving!
+    ServerError(String),
+}
+
+/// Ask Planchette to send a design to the laser cutter.
+///
+/// # Arguments
+/// * `planchette_url`: The URL of the Planchette server to send designs to. This is the
+///   "root" URL, e.g. `http://ouija.yhs` as opposed to `http://ouija.yhs/jobs`. The appropriate
+///   paths will be appended to the provided URL when constructing requests to send to the server.
+/// * `design_file`: The design file to be sent to the laser cutter.
+/// * `tool_passes`: The tool passes to use to cut the design.
+/// * `offset`: The offset to apply to the design, relative to the top-left corner.
+///
+/// # Returns
+/// `Ok(())` if the design has successfully been sent all the way to the the laser cutter.
+///
+/// # Errors
+/// A [`PlanchetteError`] will be provided describing what went wrong.
+fn send_job_to_planchette(
+    planchette_url: &reqwest::Url,
+    design_file: &DesignFile,
+    tool_passes: &[ToolPass],
+    offset: &DesignOffset,
+) -> Result<(), PlanchetteError> {
+    let client = reqwest::blocking::Client::new();
+    let url = planchette_url
+        .join("/jobs")
+        .map_err(|err| PlanchetteError::FailedToCreateRequest(err.to_string()))?;
+
+    let job = PrintJob {
+        design_file: design_file.bytes.clone(),
+        file_name: design_file.name.clone(),
+        tool_passes: tool_passes.to_vec(),
+        offset: offset.clone(),
+    };
+    let job_str = serde_json::to_string(&job)
+        .map_err(|err| PlanchetteError::FailedToEncodeRequest(err.to_string()))?;
+
+    let response = client
+        .post(url)
+        .body(job_str)
+        .send()
+        .map_err(|err| PlanchetteError::FailedToSendRequest(err.to_string()))?;
+
+    match response.status() {
+        StatusCode::BAD_REQUEST => {
+            let response_body = response.text().unwrap_or("Unknown Error".to_string());
+            Err(PlanchetteError::BadRequest(response_body))
+        }
+        StatusCode::INTERNAL_SERVER_ERROR => {
+            let response_body = response.text().unwrap_or("Unknown Error".to_string());
+            Err(PlanchetteError::ServerError(response_body))
+        }
+        _ => Ok(()),
+    }
+}
+
 /// Handle an error produced when trying to cut a design file.
 ///
 /// # Arguments
 /// * `ui_context`: The Seance UI context.
 /// * `err`: The error that was produced.
-fn handle_cut_file_error(ui_context: &mut UIContext, err: SendToDeviceError) {
+fn handle_planchette_error(ui_context: &mut UIContext, err: PlanchetteError) {
     log::error!("Error cutting design: {err:?}");
     let (error, details) = match err {
-        SendToDeviceError::ErrorParsingSvg(error) => (
-            "Error processing design".to_string(),
-            format!("Error from SVG parsing library: {error}"),
-        ),
-        SendToDeviceError::FailedToOpenPrinter(err) => (
-            "Error opening printer".to_string(),
-            format!("I/O error: {err:?}"),
-        ),
-        SendToDeviceError::FailedToWriteToPrinter(err) => (
-            "Error writing to printer".to_string(),
-            format!("I/O error: {err:?}"),
-        ),
+        PlanchetteError::FailedToCreateRequest(err) => {
+            ("Failed to construct request to laser cutter server", err)
+        }
+        PlanchetteError::FailedToEncodeRequest(err) => {
+            ("Failed to encode request to laser cutter server", err)
+        }
+        PlanchetteError::FailedToSendRequest(err) => {
+            ("Failed to send request to laser cutter server", err)
+        }
+        PlanchetteError::BadRequest(err) => ("Server rejected the design file", err),
+        PlanchetteError::ServerError(err) => ("Server encountered an error", err),
     };
     ui_context.send_ui_message(UIMessage::ShowError {
-        error,
+        error: error.to_string(),
         details: Some(details),
     });
 }
@@ -1792,6 +1873,7 @@ fn settings_dialog(
     ui_context: &mut UIContext,
     settings: &SettingsDialogState,
 ) {
+    let url_valid = reqwest::Url::parse(&settings.planchette_url).is_ok();
     let window_size = ctx.screen_rect().max;
     let settings_dialog_size = Vec2 { x: 640.0, y: 480.0 };
     ctx.show_viewport_immediate(
@@ -1807,70 +1889,22 @@ fn settings_dialog(
         move |ctx, _| {
             egui::CentralPanel::default().show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    let mut printer = settings.print_device.clone();
-                    match &mut printer {
-                        #[cfg(not(target_os = "windows"))]
-                        PrintDevice::Path { path } => {
-                            ui.label("Print Device");
-                            let printer_edit = ui
-                                .text_edit_singleline(path)
-                                .on_hover_text(r#"This is the device that will be used to print."#);
-                            if printer_edit.changed() || printer_edit.lost_focus() {
-                                ui_context
-                                    .send_ui_message(UIMessage::PrinterSettingsChanged { printer });
-                            }
-                        }
-                        #[cfg(target_os = "windows")]
-                        PrintDevice::USBPort { port: current_port } => {
-                            let ports = usb_enumeration::enumerate(None, None);
-                            let mut selected: Option<usb_enumeration::UsbDevice> = None;
-                            if let Some(port) = current_port {
-                                selected = ports
-                                    .iter()
-                                    .find(|p| {
-                                        p.vendor_id == port.vendor_id
-                                            && p.product_id == port.product_id
-                                    })
-                                    .cloned();
-                            }
+                    ui.label("URL to send jobs to");
 
-                            let original_selected = current_port.clone();
+                    let mut planchette_url = settings.planchette_url.clone();
+                    if ui.text_edit_singleline(&mut planchette_url).changed() {
+                        ui_context
+                            .send_ui_message(UIMessage::PrinterSettingsChanged { planchette_url });
+                    }
 
-                            match &selected {
-                                Some(head) => {
-                                    let label = head.description.clone().unwrap();
-                                    egui::ComboBox::from_label("Print Device").selected_text(label)
-                                }
-                                None => egui::ComboBox::from_label("Print Device"),
-                            }
-                            .show_ui(ui, |ui| {
-                                for port in ports {
-                                    if let Some(label) = port.description {
-                                        ui.selectable_value(
-                                            current_port,
-                                            Some(USBPort {
-                                                vendor_id: port.vendor_id,
-                                                product_id: port.product_id,
-                                            }),
-                                            label,
-                                        );
-                                    }
-                                }
-                            });
-
-                            if *current_port != original_selected {
-                                let _ = ui_message_tx.send(UIMessage::PrinterSettingsChanged {
-                                    printer: PrintDevice::USBPort {
-                                        port: current_port.clone(),
-                                    },
-                                });
-                            }
-                        }
+                    if !url_valid {
+                        ui.label("URL is invalid");
                     }
                 });
 
                 ui.with_layout(Layout::right_to_left(Align::BOTTOM), |ui| {
-                    if ui.button("Save and Close").clicked() {
+                    let save_button = egui::Button::new("Save and Close");
+                    if ui.add_enabled(url_valid, save_button).clicked() {
                         ui_context.send_ui_message(UIMessage::SaveSettings);
                         ui_context.send_ui_message(UIMessage::CloseSettingsDialog);
                     }
@@ -1880,10 +1914,7 @@ fn settings_dialog(
                 });
             });
             ctx.input(|i| {
-                if i.viewport().close_requested()
-                    || i.key_pressed(Key::Escape)
-                    || i.key_pressed(Key::Enter)
-                {
+                if i.viewport().close_requested() || i.key_pressed(Key::Escape) {
                     // Tell parent to close us.
                     ui_context.send_ui_message(UIMessage::CloseSettingsDialog);
                 }
@@ -1928,7 +1959,7 @@ fn load_design(
 
     match fs::read(path) {
         Ok(bytes) => {
-            let svg = parse_svg(path, &bytes).map_err(|err| {
+            let svg = parse_svg(&bytes).map_err(|err| {
                 let error_string = format!("Error reading SVG file: {err}");
                 log::error!("{error_string}");
                 error_string
@@ -1942,6 +1973,7 @@ fn load_design(
             Ok((
                 DesignFile {
                     name: file_name.to_string(),
+                    bytes,
                     tree: svg,
                     width_mm: width,
                     height_mm: height,

@@ -161,6 +161,8 @@
         buildInputs = with pkgs; [
           pkg-config
 
+          openssl.dev
+
           # So many things required for wgpu
           libxkbcommon
           libGL

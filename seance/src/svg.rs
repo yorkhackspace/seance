@@ -1,7 +1,7 @@
 //!`svg`
 //!
 //! Provides utilities for handling SVG data.
-use std::{collections::HashMap, path::Path, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use usvg::{self, ImageRendering, ShapeRendering, TextRendering};
 
@@ -25,7 +25,7 @@ pub const SVG_UNITS_PER_MM: f32 = 3.779_527_559;
 /// Parsing errors if a tree cannot be parsed from the provided `bytes`.
 #[allow(clippy::missing_panics_doc)]
 #[allow(clippy::module_name_repetitions)]
-pub fn parse_svg(path: &Path, bytes: &[u8]) -> Result<usvg::Tree, usvg::Error> {
+pub fn parse_svg(bytes: &[u8]) -> Result<usvg::Tree, usvg::Error> {
     let mut fontdb = usvg::fontdb::Database::new();
     fontdb.load_system_fonts();
 
@@ -35,10 +35,7 @@ pub fn parse_svg(path: &Path, bytes: &[u8]) -> Result<usvg::Tree, usvg::Error> {
     fontdb.set_fantasy_family("Impact");
     fontdb.set_monospace_family("Courier New");
 
-    let resources_dir = path.parent().map(std::path::Path::to_path_buf);
-
     let re_opt = usvg::Options {
-        resources_dir,
         dpi: 96.0,
         font_family: "Times New Roman".to_string(),
         font_size: 12.0,
@@ -51,6 +48,7 @@ pub fn parse_svg(path: &Path, bytes: &[u8]) -> Result<usvg::Tree, usvg::Error> {
         font_resolver: usvg::FontResolver::default(),
         fontdb: Arc::new(fontdb),
         style_sheet: None,
+        resources_dir: None,
     };
 
     usvg::Tree::from_data(bytes, &re_opt)

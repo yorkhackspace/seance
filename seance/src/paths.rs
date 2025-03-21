@@ -5,14 +5,13 @@
 
 use std::collections::HashMap;
 
-use crate::Vec2;
 use lyon_algorithms::geom::euclid::UnknownUnit;
 use lyon_algorithms::path::math::Point;
 use lyon_algorithms::path::PathSlice;
 use lyon_algorithms::walk::{walk_along_path, RegularPattern, WalkerEvent};
 use usvg::Path;
 
-use crate::{ToolPass, BED_HEIGHT_MM};
+use crate::{DesignOffset, ToolPass, BED_HEIGHT_MM};
 
 /// The number of mm that are moved per unit that the plotter is instructed to move.
 /// This is the HPGL/2 default specified in the HPGL/2 specification.
@@ -62,7 +61,7 @@ impl PartialEq<[u8; 3]> for PathColour {
 #[allow(clippy::implicit_hasher)]
 pub fn resolve_paths(
     paths_grouped_by_colour: &HashMap<PathColour, Vec<Box<Path>>>,
-    offset: Vec2,
+    offset: &DesignOffset,
     interval: f32,
 ) -> HashMap<PathColour, Vec<PathInMM>> {
     let mut resolved_paths: HashMap<PathColour, Vec<PathInMM>> = HashMap::new();
@@ -256,7 +255,13 @@ fn points_along_path(path: PathSlice<'_>, points: &mut Vec<Point>, interval: f32
 /// * `point`: The point to offset.
 /// * `offset_x`: Offset in mm, where +x is more right
 /// * `offset_y`: Offset in mm, where +y is more down.
-fn offset_point(point: &mut Point, (offset_x, offset_y): Vec2) {
+fn offset_point(
+    point: &mut Point,
+    DesignOffset {
+        x: offset_x,
+        y: offset_y,
+    }: &DesignOffset,
+) {
     point.x += offset_x;
     point.y += offset_y;
 }

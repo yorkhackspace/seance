@@ -9,21 +9,15 @@ mod paths;
 mod pcl;
 pub mod svg;
 
-use std::{
-    fs::OpenOptions,
-    io::{self, Write},
-    path::Path,
-};
+use std::{fs, path::PathBuf};
 
 use hpgl::generate_hpgl;
 pub use laser_passes::ToolPass;
 pub use paths::resolve_paths;
 use paths::{convert_points_to_plotter_units, filter_paths_to_tool_passes};
 use pcl::wrap_hpgl_in_pcl;
+use serde::{Deserialize, Serialize};
 use svg::get_paths_grouped_by_colour;
-
-/// Convenience type for storing a vector of two numbers.
-type Vec2 = (f32, f32);
 
 /// Minimum X position of the X axis in mm.
 /// Actually -50.72 but the cutter refuses to move this far...
@@ -43,16 +37,14 @@ pub const BED_WIDTH_MM: f32 = BED_X_AXIS_MAXIMUM_MM;
 /// The height of the cutting area, in mm.
 pub const BED_HEIGHT_MM: f32 = BED_Y_AXIS_MAXIMUM_MM;
 
-/// The default print device to use on non-Windows systems.
-#[cfg(not(target_os = "windows"))]
-pub const DEFAULT_PRINT_DEVICE: &str = "/dev/usb/lp0";
-
 /// A loaded design.
 pub struct DesignFile {
     /// The name of the design.
     pub name: String,
     /// The SVG tree.
     pub tree: usvg::Tree,
+    /// The raw bytes of the file.
+    pub bytes: Vec<u8>,
     /// Width of the design in mm.
     pub width_mm: f32,
     /// Height of the design in mm.
@@ -77,125 +69,33 @@ impl DesignFile {
     }
 }
 
+/// Offset of a design from the origin (top-left), in mm.
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DesignOffset {
+    /// Horizontal axis offset, in mm, where more
+    /// positive is more to the right.
+    pub x: f32,
+    /// Vertical axis offset, in mm, where more
+    /// positive is more to the bottom.
+    pub y: f32,
+}
+
 /// Errors that can occur when sending the design to the HPGL device.
 #[derive(Debug)]
 pub enum SendToDeviceError {
     /// There was an error while parsing the SVG file.
     ErrorParsingSvg(usvg::Error),
-    /// Failed to open the printer port.
-    FailedToOpenPrinter(io::Error),
     /// Failed to write to the printer port.
-    FailedToWriteToPrinter(io::Error),
-}
-
-/// The printer-like device that we're using.
-#[derive(Clone, serde::Deserialize, serde::Serialize)]
-pub enum PrintDevice {
-    /// We're printing to a device path.
-    #[cfg(not(target_os = "windows"))]
-    Path {
-        /// The path to send the bytes to.
-        path: String,
-    },
-    /// We're using a USB port.
-    #[cfg(target_os = "windows")]
-    USBPort {
-        /// The USB port to use.
-        port: Option<USBPort>,
-    },
-}
-
-/// Represents a USB port.
-#[cfg(target_os = "windows")]
-#[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize)]
-pub struct USBPort {
-    /// The vendor Id of the USB device.
-    vendor_id: u16,
-    /// The product Id of the USB device.
-    product_id: u16,
-}
-
-impl PrintDevice {
-    /// Sends a PCL string to the printer-like device.
-    ///
-    /// # Arguments
-    /// * `design`: The PCL to print.
-    ///
-    /// # Returns
-    /// `Ok(())` if the PCL was successfully sent to the printer, otherwise a [`SendToDeviceError`].
-    fn print(&self, design: &str) -> Result<(), SendToDeviceError> {
-        match self {
-            #[cfg(not(target_os = "windows"))]
-            PrintDevice::Path { path } => {
-                let mut file = OpenOptions::new()
-                    .create(false)
-                    .append(true)
-                    .open(path)
-                    .map_err(SendToDeviceError::FailedToOpenPrinter)?;
-                file.write(design.as_bytes())
-                    .map_err(SendToDeviceError::FailedToWriteToPrinter)?;
-
-                Ok(())
-            }
-            #[cfg(target_os = "windows")]
-            PrintDevice::USBPort { port } => {
-                let api = hidapi_rusb::HidApi::new().unwrap();
-                if let Some(port) = port {
-                    if let Ok(device) = api.open(port.vendor_id, port.product_id) {
-                        device.write(design.as_bytes()).expect("Failed to print");
-                    }
-                }
-            }
-        }
-    }
-
-    /// Checks whether the print device is valid to be used for printing.
-    ///
-    /// # Returns
-    /// `true` if the print device is valid to be used for printing.
-    pub fn is_valid(&self) -> bool {
-        match self {
-            #[cfg(not(target_os = "windows"))]
-            PrintDevice::Path { path } => Path::new(path).exists(),
-            #[cfg(target_os = "windows")]
-            PrintDevice::USBPort { port } => {
-                let Some(port) = port else {
-                    return false;
-                };
-
-                let api = hidapi_rusb::HidApi::new().unwrap();
-                api.open(port.vendor_id, port.product_id).is_ok()
-            }
-        }
-    }
-}
-
-impl Default for PrintDevice {
-    #[cfg(not(target_os = "windows"))]
-    fn default() -> Self {
-        PrintDevice::Path {
-            path: DEFAULT_PRINT_DEVICE.to_string(),
-        }
-    }
-
-    #[cfg(target_os = "windows")]
-    fn default() -> Self {
-        let port = usb_enumeration::enumerate(None, None)
-            .first()
-            .map(|port| USBPort {
-                vendor_id: port.vendor_id,
-                product_id: port.product_id,
-            });
-        PrintDevice::USBPort { port }
-    }
+    FailedToWriteToPrinter(String),
 }
 
 /// Sends a design file to the printer-like device.
 ///
 /// # Arguments
 /// * `design_file`: The design to send to the printer-like device.
+/// * `design_name`: The name of the design to be shown to the user.
 /// * `tool_passes`: Passes of the cutting tool.
-/// * `print_device`: The device to send the design to.
+/// * `print_device`: The path to the device to write to.
 /// * `offset`: How much to move the design by relative to its starting position, in mm, where +x is more right and +y is more down.
 ///
 /// # Returns
@@ -204,20 +104,19 @@ impl Default for PrintDevice {
 /// # Errors
 /// If there's an error preparing the print file or communicating with the printer.
 pub fn cut_file(
-    design_file: &DesignFile,
+    design_file: &usvg::Tree,
+    design_name: &str,
     tool_passes: &Vec<ToolPass>,
-    print_device: &PrintDevice,
-    offset: Vec2,
+    print_device: &PathBuf,
+    offset: &DesignOffset,
 ) -> Result<(), SendToDeviceError> {
-    let design_name = design_file.name();
-
-    let paths = get_paths_grouped_by_colour(&design_file.tree);
+    let paths = get_paths_grouped_by_colour(design_file);
     let mut paths_in_mm = resolve_paths(&paths, offset, 1.0);
     filter_paths_to_tool_passes(&mut paths_in_mm, tool_passes);
     let resolved_paths = convert_points_to_plotter_units(&paths_in_mm);
     let hpgl = generate_hpgl(&resolved_paths, tool_passes);
     let pcl = wrap_hpgl_in_pcl(hpgl, design_name, tool_passes);
-    print_device.print(&pcl)?;
+    fs::write(print_device, pcl.as_bytes()).unwrap();
 
     Ok(())
 }

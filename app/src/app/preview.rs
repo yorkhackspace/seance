@@ -10,8 +10,9 @@ use std::{
 use egui::{ColorImage, ImageData, TextureHandle, TextureOptions};
 use oneshot::TryRecvError;
 
-use seance::{
-    resolve_paths, svg::get_paths_grouped_by_colour, DesignFile, BED_HEIGHT_MM, BED_WIDTH_MM,
+use planchette::seance::{
+    resolve_paths, svg::get_paths_grouped_by_colour, DesignFile, DesignOffset, BED_HEIGHT_MM,
+    BED_WIDTH_MM,
 };
 
 use super::DesignWithMeta;
@@ -33,7 +34,7 @@ pub struct DesignPreview {
     /// The current zoom level.
     zoom: f32,
     /// How much the design is offset (in mm) from top-left corner.
-    design_offset_mm: egui::Vec2,
+    design_offset_mm: DesignOffset,
     /// The texture handle created from the texture buffer, this is what egui uses to draw the preview in the UI.
     image_texture: Option<TextureHandle>,
     /// Where to put requests to re-render.
@@ -112,7 +113,7 @@ impl DesignPreview {
     ///
     /// # Returns
     /// Offset in mm.
-    pub fn get_design_offset(&self) -> &egui::Vec2 {
+    pub fn get_design_offset(&self) -> &DesignOffset {
         &self.design_offset_mm
     }
 
@@ -123,7 +124,7 @@ impl DesignPreview {
     /// * `design_file`: The design file to be offset.
     pub fn set_design_offset(
         &mut self,
-        mut offset_mm: egui::Vec2,
+        mut offset_mm: DesignOffset,
         design_file: &Arc<RwLock<Option<DesignWithMeta>>>,
     ) {
         offset_mm.x = offset_mm.x.max(0.0);
@@ -168,7 +169,7 @@ impl DesignPreview {
                             .expect("Render requests mutex must be lockable");
                         *render_request_lock = Some(RenderRequest {
                             size: self.size,
-                            design_offset_mm: self.design_offset_mm,
+                            design_offset_mm: self.design_offset_mm.clone(),
                             design_file: design_file.clone(),
                             callback: callback_tx,
                         });
@@ -211,7 +212,7 @@ impl DesignPreview {
                 .expect("Render requests mutex must be lockable");
             *render_request_lock = Some(RenderRequest {
                 size: self.size,
-                design_offset_mm: self.design_offset_mm,
+                design_offset_mm: self.design_offset_mm.clone(),
                 design_file: design_file.clone(),
                 callback: callback_tx,
             });
@@ -231,7 +232,7 @@ pub struct RenderRequest {
     /// The size of the preview to render.
     size: egui::Vec2,
     /// Offset of the design from the top-left corner, in mm.
-    design_offset_mm: egui::Vec2,
+    design_offset_mm: DesignOffset,
     /// The design file to render.
     design_file: Arc<RwLock<Option<DesignWithMeta>>>,
     /// Callback to send the rendered preview into.
@@ -296,7 +297,7 @@ pub fn render_task(render_request: Arc<Mutex<Option<RenderRequest>>>) {
 fn render_inner(
     size: egui::Vec2,
     previous_size: &mut Option<egui::Vec2>,
-    offset_mm: &egui::Vec2,
+    offset_mm: &DesignOffset,
     design_file: &Arc<RwLock<Option<DesignWithMeta>>>,
     texture_buffer: &mut Vec<u8>,
     previous_design_hash: &mut Option<u64>,
@@ -365,7 +366,7 @@ fn render_inner(
         *previous_design_hash = Some(*hash);
 
         let grouped_paths = get_paths_grouped_by_colour(tree);
-        let resolved_paths = resolve_paths(&grouped_paths, (offset_mm.x, offset_mm.y), 0.1);
+        let resolved_paths = resolve_paths(&grouped_paths, offset_mm, 0.1);
 
         for (path_colour, paths) in resolved_paths {
             for path in paths {

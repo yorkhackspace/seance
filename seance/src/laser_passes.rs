@@ -15,10 +15,9 @@ pub struct ToolPass {
     power: u64,
     /// Tool speed, max 1000. Unitless, proportion of max.
     speed: u64,
-    /// Raster engrave.
-    rast: bool,
-    /// Enable or disbale this tool pass
-    enable: bool,
+    /// Whether this tool pass is enabled.
+    /// If so then paths with the colour of this pass will be cut with this tool pass.
+    enabled: bool,
 }
 
 impl ToolPass {
@@ -31,20 +30,17 @@ impl ToolPass {
     /// * `b`: Blue channel value.
     /// * `power`: Tool power, will be clamped to 1000.
     /// * `speed`: Tool speed, will be clamped to 1000.
-    /// * `rast`: Raster engrave.
-    /// * `vect`: ? Unknown.
+    /// * `enabled`: Whether the tool pass is enabled.
     ///
     /// # Returns
     /// A new [`ToolPass`] with values appropriately clamped.
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(name: String, r: u8, g: u8, b: u8, power: u64, speed: u64, rast: bool) -> Self {
+    pub fn new(name: String, r: u8, g: u8, b: u8, power: u64, speed: u64, enabled: bool) -> Self {
         ToolPass {
             name,
             colour: [r, g, b],
             power: power.min(1000),
             speed: speed.min(1000),
-            rast,
-            enable: true,
+            enabled,
         }
     }
 
@@ -117,7 +113,7 @@ impl ToolPass {
     /// # Returns
     /// Whether the tool pass is enabled.
     pub fn enabled(&self) -> &bool {
-        &self.enable
+        &self.enabled
     }
 
     /// Sets the enable state of the tool pass
@@ -125,6 +121,6 @@ impl ToolPass {
     /// # Arguments
     /// * `new_state`: The new enable state of the tool pass.
     pub fn set_enabled(&mut self, new_state: bool) {
-        self.enable = new_state;
+        self.enabled = new_state;
     }
 }

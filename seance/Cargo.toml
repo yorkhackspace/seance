@@ -19,8 +19,3 @@ log = "0.4"
 lyon_algorithms = "1.0.4"
 serde = { version = "1", features = ["derive"] }
 usvg.workspace = true
-
-[target.'cfg(windows)'.dependencies]
-hidapi-rusb = "1.3.3"
-windows = { version = "0.58.0" }
-usb_enumeration = "0.2.0"
