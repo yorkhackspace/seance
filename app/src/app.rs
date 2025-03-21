@@ -38,7 +38,7 @@ use planchette::{
 type DesignWithMeta = (planchette::seance::DesignFile, u64, PathBuf);
 
 /// Default URL of the Planchette server to send jobs to.
-const DEFAULT_PLANCHETTE_URL: &str = "http://ouija.yhs";
+const DEFAULT_PLANCHETTE_URL: &str = "http://ouija.yhs:1789";
 /// The minimum amount that a design can be moved by.
 const MINIMUM_DEFAULT_DESIGN_MOVE_STEP_MM: f32 = 0.1;
 /// The default amount that designs are moved by.
