@@ -1,0 +1,14 @@
+[Unit]
+Description=Plachette "print server"
+After=network.target
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=planchette
+Group=lp
+ExecStart=/usr/bin/planchette
+
+[Install]
+WantedBy=multi-user.target

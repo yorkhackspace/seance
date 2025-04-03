@@ -8,15 +8,11 @@ edition = "2021"
 include = ["**/*.rs", "Cargo.toml"]
 rust-version = "1.83"
 
-[workspace.lints.rust]
-missing_docs = "deny"
-
 [workspace.lints.clippy]
 manual_assert = "deny"
 missing_assert_message = "deny"
 disallowed_macros = "deny"
 doc_markdown = "deny"
-missing_docs_in_private_items = "deny"
 too_many_arguments = "allow"
 
 [profile.release]

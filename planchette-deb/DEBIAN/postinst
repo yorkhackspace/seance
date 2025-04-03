@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+
+# This can fail if planchette already exists.
+# We could be smarter about checking this if, dear reader,
+# one were feeling enthusiastic about it
+useradd -G lp planchette || true
+
+chown root:lp /usr/bin/planchette
+systemctl enable planchette.service
+systemctl start planchette.service

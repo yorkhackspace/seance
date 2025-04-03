@@ -3,4 +3,5 @@
 /target
 /result
 /logo.png
-/ouija.deb
+/planchette.deb
+/planchette-deb/usr/bin/planchette

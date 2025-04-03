@@ -1196,8 +1196,6 @@ fn toolbar_widget(
 enum PlanchetteError {
     /// We were unable to construct the URL we want to send the request to.
     FailedToCreateRequest(String),
-    /// We failed to serialize the request body.
-    FailedToEncodeRequest(String),
     /// Sending the request to the Planchette server failed.
     FailedToSendRequest(String),
     /// The server informed us that our request was bad and we should feel bad.
@@ -1263,12 +1261,9 @@ fn send_job_inner(planchette_url: reqwest::Url, job: PrintJob) -> Result<(), Pla
         .join("/jobs")
         .map_err(|err| PlanchetteError::FailedToCreateRequest(err.to_string()))?;
 
-    let job_str = serde_json::to_string(&job)
-        .map_err(|err| PlanchetteError::FailedToEncodeRequest(err.to_string()))?;
-
     let response = client
         .post(url)
-        .body(job_str)
+        .json(&job)
         .send()
         .map_err(|err| PlanchetteError::FailedToSendRequest(err.to_string()))?;
 
@@ -1295,9 +1290,6 @@ fn handle_planchette_error(ui_context: &mut UIContext, err: PlanchetteError) {
     let (error, details) = match err {
         PlanchetteError::FailedToCreateRequest(err) => {
             ("Failed to construct request to laser cutter server", err)
-        }
-        PlanchetteError::FailedToEncodeRequest(err) => {
-            ("Failed to encode request to laser cutter server", err)
         }
         PlanchetteError::FailedToSendRequest(err) => {
             ("Failed to send request to laser cutter server", err)

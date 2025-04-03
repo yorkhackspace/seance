@@ -133,6 +133,8 @@
             src = ./.;
             strictDeps = true;
             doCheck = false;
+            cargoBuildOptions = x: x ++ [ "-p" "planchette" ];
+            cargoTestOptions = x: x ++ [ "-p" "planchette" ];
 
             TARGET_CC = "${pkgsCross.stdenv.cc}/bin/${pkgsCross.stdenv.cc.targetPrefix}cc";
 
@@ -154,6 +156,7 @@
 
         nativeBuildInputs = with pkgs; [
           rustToolchain
+          cargo-deb
           typos
 
           dpkg
