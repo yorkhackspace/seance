@@ -250,6 +250,7 @@ pub fn render_task(render_request: Arc<Mutex<Option<RenderRequest>>>) {
     let mut texture_buffer: Vec<u8> = vec![];
     let mut previous_design_hash: Option<u64> = None;
     let mut previous_size: Option<egui::Vec2> = None;
+    let mut previous_offset: Option<DesignOffset> = None;
 
     loop {
         let request = {
@@ -272,6 +273,7 @@ pub fn render_task(render_request: Arc<Mutex<Option<RenderRequest>>>) {
                 size,
                 &mut previous_size,
                 &design_offset_mm,
+                &mut previous_offset,
                 &design_file,
                 &mut texture_buffer,
                 &mut previous_design_hash,
@@ -290,6 +292,7 @@ pub fn render_task(render_request: Arc<Mutex<Option<RenderRequest>>>) {
 /// * `size`: The size to draw the preview at.
 /// * `previous_size`: The previous size we drew the preview at, we will re-draw if the size has changed.
 /// * `offset_mm`: The offset of the design from the top-left corner, in mm.
+/// * `previous_offset_mm`: The previous offset of the design.
 /// * `design_file`: The design file to render.
 /// * `texture_buffer`: This is the texture that is actually shown to the user.
 /// * `previous_design_hash`: The previous hash of the design file.
@@ -298,6 +301,7 @@ fn render_inner(
     size: egui::Vec2,
     previous_size: &mut Option<egui::Vec2>,
     offset_mm: &DesignOffset,
+    previous_offset_mm: &mut Option<DesignOffset>,
     design_file: &Arc<RwLock<Option<DesignWithMeta>>>,
     texture_buffer: &mut Vec<u8>,
     previous_design_hash: &mut Option<u64>,
@@ -325,6 +329,7 @@ fn render_inner(
 
     if Some(size) == *previous_size
         && design.as_ref().map(|(_, hash, _)| hash) == previous_design_hash.as_ref()
+        && Some(offset_mm) == previous_offset_mm.as_ref()
     {
         // Nothing has changed, nothing to do.
         return;
@@ -337,6 +342,7 @@ fn render_inner(
         texture_width as usize,
         texture_height as usize,
     );
+    *previous_offset_mm = Some(offset_mm.clone());
 
     for (index, pixel) in texture_buffer.chunks_exact_mut(4).enumerate() {
         // Get the x/y position of the pixel.
