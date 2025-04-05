@@ -18,9 +18,9 @@ use std::{
 };
 
 use egui::{
-    ecolor::HexColor, Align, Checkbox, Color32, DragValue, FontId, Frame, Key, Label, Layout,
-    Margin, Pos2, Rect, RichText, ScrollArea, Sense, Slider, Stroke, StrokeKind, TextEdit,
-    UiBuilder, Vec2, Visuals, WidgetText,
+    ecolor::HexColor, Align, Color32, DragValue, FontId, Frame, Key, Label, Layout, Margin, Pos2,
+    Rect, RichText, ScrollArea, Sense, Slider, Stroke, StrokeKind, TextEdit, UiBuilder, Vec2,
+    Visuals, WidgetText,
 };
 use egui_dnd::{dnd, DragDropConfig};
 use egui_extras::{Size, StripBuilder};
@@ -513,6 +513,11 @@ impl Seance {
                         preview.set_design_offset(new_offset, &self.design_file);
                     }
                 }
+                UIMessage::DesignOffsetChanged { offset } => {
+                    if let Some(preview) = &mut self.design_preview_image {
+                        preview.set_design_offset(offset, &self.design_file);
+                    }
+                }
                 UIMessage::ResetDesignPosition => {
                     if let Some(preview) = &mut self.design_preview_image {
                         preview.set_design_offset(Default::default(), &self.design_file);
@@ -853,6 +858,11 @@ enum UIMessage {
         direction: DesignMoveDirection,
         /// The amount to move the design in mm.
         step: f32,
+    },
+    /// Design offset has changed to a new position.
+    DesignOffsetChanged {
+        /// The new offset.
+        offset: DesignOffset,
     },
     /// Reset the design to align with the top-left edge.
     ResetDesignPosition,
@@ -1361,11 +1371,17 @@ fn ui_main(
                             });
                         });
                         strip.cell(|ui| {
+                            let current_offset = match design_preview_image {
+                                Some(preview) => preview.get_design_offset().clone(),
+                                None => DesignOffset::default(),
+                            };
+
                             design_preview_navigation(
                                 ui,
                                 ui_context,
                                 preview_zoom_level,
                                 design_move_step_mm,
+                                &current_offset,
                             );
                         });
                     });
@@ -1380,11 +1396,13 @@ fn ui_main(
 /// * `ui_context`: The Seance UI context.
 /// * `preview_zoom_level`: How much the preview image is zoomed in.
 /// * `design_move_step_mm`: The current amount to step the design by when moving it.
+/// * `current_offset`: The current offset of the design.
 fn design_preview_navigation(
     ui: &mut egui::Ui,
     ui_context: &mut UIContext,
     preview_zoom_level: f32,
     design_move_step_mm: f32,
+    current_offset: &DesignOffset,
 ) {
     ui.horizontal(|ui| {
         let mut zoom_value = preview_zoom_level;
@@ -1502,6 +1520,38 @@ fn design_preview_navigation(
             if ui.add(step_by_widget).changed() {
                 ui_context.send_ui_message(UIMessage::DesignMoveStepChanged { step: step_value });
             }
+            ui.label("Position");
+            ui.horizontal(|ui| {
+                ui.label("X");
+                let mut offset_x = current_offset.x;
+                let offset_x_slider = DragValue::new(&mut offset_x)
+                    .max_decimals(2)
+                    .range(0.0..=BED_WIDTH_MM)
+                    .clamp_existing_to_range(true);
+                if ui.add(offset_x_slider).changed() {
+                    ui_context.send_ui_message(UIMessage::DesignOffsetChanged {
+                        offset: DesignOffset {
+                            x: offset_x,
+                            y: current_offset.y,
+                        },
+                    });
+                }
+
+                ui.label("Y");
+                let mut offset_y = current_offset.y;
+                let offset_y_slider = DragValue::new(&mut offset_y)
+                    .max_decimals(2)
+                    .range(0.0..=BED_HEIGHT_MM)
+                    .clamp_existing_to_range(true);
+                if ui.add(offset_y_slider).changed() {
+                    ui_context.send_ui_message(UIMessage::DesignOffsetChanged {
+                        offset: DesignOffset {
+                            x: current_offset.x,
+                            y: offset_y,
+                        },
+                    });
+                }
+            });
         });
     });
 }
@@ -1679,16 +1729,7 @@ fn tool_pass_details_widget(
                     .sizes(Size::remainder(), 2)
                     .horizontal(|mut strip| {
                         strip.cell(|ui| {
-                            ui.label("Enabled");
-                            let mut enabled_val = *tool_pass.enabled();
-                            let checkbox = Checkbox::without_text(&mut enabled_val);
-                            let enable_box = ui.add(checkbox);
-                            if enable_box.changed() {
-                                ui_context.send_ui_message(UIMessage::ToolPassEnableChanged {
-                                    index: pass_index,
-                                    enabled: enabled_val,
-                                });
-                            }
+                            tool_pass_enable_button_widget(ui, ui_context, tool_pass, pass_index);
                         });
                         strip.cell(|ui| {
                             ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
@@ -1738,7 +1779,7 @@ fn tool_pass_name_widget(
             ui_context.send_ui_message(UIMessage::ToolPassNameLostFocus);
         }
     } else {
-        let text = WidgetText::from(pen_name).strong();
+        let text = RichText::new(pen_name).strong().size(20.0);
         let pen_name_label = Label::new(text).truncate().sense(Sense::click());
         let pen_name_widget = ui
             .add(pen_name_label)
@@ -1815,6 +1856,50 @@ fn tool_pass_colour_widget(
         if colour_label.clicked() {
             ui_context.send_ui_message(UIMessage::ToolPassColourClicked { index: pass_index });
         }
+    }
+}
+
+/// Draws the Enabled/Disabled status/button for a tool pass.
+///
+/// # Arguments
+/// * `ui`: The UI to draw to.
+/// * `ui_context`: The Seance UI context.
+/// * `tool_pass`: The tool pass to draw.
+/// * `pass_index`: The index of the tool pass.
+fn tool_pass_enable_button_widget(
+    ui: &mut egui::Ui,
+    ui_context: &mut UIContext,
+    tool_pass: &ToolPass,
+    pass_index: usize,
+) {
+    let is_dark_mode = ui.ctx().style().visuals.dark_mode;
+
+    let (label, colour) = if *tool_pass.enabled() {
+        (
+            "Enabled",
+            if is_dark_mode {
+                Color32::DARK_GREEN
+            } else {
+                Color32::LIGHT_GREEN
+            },
+        )
+    } else {
+        (
+            "Disabled",
+            if is_dark_mode {
+                Color32::DARK_RED
+            } else {
+                Color32::LIGHT_RED
+            },
+        )
+    };
+    let button = egui::Button::new(label).fill(colour);
+
+    if ui.add(button).clicked() {
+        ui_context.send_ui_message(UIMessage::ToolPassEnableChanged {
+            index: pass_index,
+            enabled: !tool_pass.enabled(),
+        });
     }
 }
 
