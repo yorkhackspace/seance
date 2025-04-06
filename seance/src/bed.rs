@@ -55,9 +55,9 @@ impl PrintBed {
     ///
     /// # Panics
     /// Panics when the values of `self` would cause truncation at the origin.
-    pub fn point_mm_to_hpgl_units(&self, point: PointInMillimeters) -> Option<ResolvedPoint> {
+    pub fn place_point(&self, point: PointInMillimeters) -> Option<ResolvedPoint> {
         #[inline]
-        fn mm_to_hpgl_units(mut value: f32, mirror: Option<f32>) -> Option<i16> {
+        fn mm_to_hpgl(mut value: f32, mirror: Option<f32>) -> Option<i16> {
             if let Some(max) = mirror {
                 value = max - value;
             }
@@ -73,16 +73,16 @@ impl PrintBed {
 
         // check printer bed sizes won't automatically cause truncation
         // TODO: do this in constructor?
-        if self.mirror_x && mm_to_hpgl_units(self.x_max, None).is_none() {
+        if self.mirror_x && mm_to_hpgl(self.x_max, None).is_none() {
             panic!("x-axis mirroring is enabled but the axis is so large it will be truncated")
         }
-        if self.mirror_y && mm_to_hpgl_units(self.y_max, None).is_none() {
+        if self.mirror_y && mm_to_hpgl(self.y_max, None).is_none() {
             panic!("y-axis mirroring is enabled but the axis is so large it will be truncated")
         }
 
         Some(ResolvedPoint {
-            x: mm_to_hpgl_units(point.x, self.mirror_x.then_some(self.width))?,
-            y: mm_to_hpgl_units(point.y, self.mirror_y.then_some(self.height))?,
+            x: mm_to_hpgl(point.x, self.mirror_x.then_some(self.width))?,
+            y: mm_to_hpgl(point.y, self.mirror_y.then_some(self.height))?,
         })
     }
 }
@@ -96,41 +96,37 @@ mod tests {
         let bed = BED_GCC_SPIRIT;
 
         assert_eq!(
-            bed.point_mm_to_hpgl_units((10.0, 10.0).into()).unwrap(),
+            bed.place_point((10.0, 10.0).into()).unwrap(),
             (400, 18128).into(),
             "10mm"
         );
         assert_eq!(
-            bed.point_mm_to_hpgl_units((0.0, 0.0).into()).unwrap(),
+            bed.place_point((0.0, 0.0).into()).unwrap(),
             (0, 18528).into(),
             "0mm"
         );
         assert_eq!(
-            bed.point_mm_to_hpgl_units((-0.0, -0.0).into()).unwrap(),
+            bed.place_point((-0.0, -0.0).into()).unwrap(),
             (0, 18528).into(),
             "-0mm"
         );
 
         // extreme values
         assert!(
-            bed.point_mm_to_hpgl_units((f32::MAX, f32::MAX).into())
-                .is_none(),
+            bed.place_point((f32::MAX, f32::MAX).into()).is_none(),
             "f32::MAX mm"
         );
         assert_eq!(
-            bed.point_mm_to_hpgl_units((819.175, 819.175).into())
-                .unwrap(),
+            bed.place_point((819.175, 819.175).into()).unwrap(),
             (32767, -14239).into(),
             "approx maximum computable value"
         );
         assert!(
-            bed.point_mm_to_hpgl_units((f32::MIN, f32::MIN).into())
-                .is_none(),
+            bed.place_point((f32::MIN, f32::MIN).into()).is_none(),
             "f32::MIN mm"
         );
         assert!(
-            bed.point_mm_to_hpgl_units((-818.0, -818.0).into())
-                .is_none(),
+            bed.place_point((-818.0, -818.0).into()).is_none(),
             "negative values"
         );
     }

@@ -40,7 +40,7 @@ pub fn generate_hpgl(
         x: x_origin,
         y: y_origin,
     } = print_bed
-        .point_mm_to_hpgl_units((0.0, 0.0).into())
+        .place_point((0.0, 0.0).into())
         .expect("adjusted origin point of print bed is unrepresentable in HPGL");
 
     // In, Default Coordinate System, Pen Up, Select first pen, reset line type, move to 0,0.

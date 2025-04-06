@@ -210,11 +210,7 @@ pub fn convert_points_to_plotter_units(
             let entry = resolved_paths.entry(*path_colour).or_default();
             entry.push(
                 path.into_iter()
-                    .map(|p| {
-                        print_bed
-                            .point_mm_to_hpgl_units(*p)
-                            .expect("point is unrepresentable")
-                    })
+                    .map(|p| print_bed.place_point(*p).expect("point is unrepresentable"))
                     .collect(),
             );
         }
