@@ -46,9 +46,9 @@ pub const BED_GCC_SPIRIT: PrintBed = PrintBed {
 };
 
 impl PrintBed {
-    /// Converts a [`PointInMillimeters`] into the same point in HPGL/2 units.
+    /// Converts a [`PointInMillimeters`] into the same point in HPGL/2 units **for this printer**.
     ///
-    /// Returns `None` if the point is out of the representable range of HPGL's 16-bit integers.
+    /// Returns `None` if the point is out of the bed of this printer.
     ///
     /// # Arguments
     /// * `point`: The point to convert from mm.
@@ -73,12 +73,14 @@ impl PrintBed {
 
         // check printer bed sizes won't automatically cause truncation
         // TODO: do this in constructor?
-        if self.mirror_x && mm_to_hpgl(self.x_max, None).is_none() {
-            panic!("x-axis mirroring is enabled but the axis is so large it will be truncated")
-        }
-        if self.mirror_y && mm_to_hpgl(self.y_max, None).is_none() {
-            panic!("y-axis mirroring is enabled but the axis is so large it will be truncated")
-        }
+        debug_assert!(
+            self.mirror_x && mm_to_hpgl(self.x_max, None).is_none(),
+            "x-axis mirroring is enabled but the axis is so large it would truncate"
+        );
+        debug_assert!(
+            self.mirror_y && mm_to_hpgl(self.y_max, None).is_none(),
+            "y-axis mirroring is enabled but the axis is so large it would truncate"
+        );
 
         Some(ResolvedPoint {
             x: mm_to_hpgl(point.x, self.mirror_x.then_some(self.width))?,
