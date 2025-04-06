@@ -1,5 +1,5 @@
 ---
-source: seance/tests/hpgl_snapshots.rs
-expression: hpgl
+source: seance/tests/snapshot_tests.rs
+expression: "&hpgl"
 ---
 IN;SC;PU;SP1;LT;PU0,18528;PU0,18528;SP0;EC0;EC1;OE;
