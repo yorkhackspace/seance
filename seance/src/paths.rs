@@ -208,7 +208,11 @@ pub fn convert_points_to_plotter_units(
     for (path_colour, paths) in paths_in_mm {
         for path in paths {
             let entry = resolved_paths.entry(*path_colour).or_default();
-            entry.push(print_bed.points_in_mm_to_printer_units(path));
+            entry.push(
+                path.into_iter()
+                    .map(|p| print_bed.point_mm_to_hpgl_units(*p))
+                    .collect(),
+            );
         }
     }
     resolved_paths

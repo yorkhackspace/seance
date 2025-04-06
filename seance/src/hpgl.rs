@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use crate::{
     bed::PrintBed,
-    paths::{PathColour, ResolvedPath},
+    paths::{PathColour, ResolvedPath, ResolvedPoint},
     ToolPass,
 };
 
@@ -36,12 +36,15 @@ pub fn generate_hpgl(
         return "No tool passes enabled".to_string();
     };
 
+    let ResolvedPoint {
+        x: x_origin,
+        y: y_origin,
+    } = print_bed.point_mm_to_hpgl_units((0.0, 0.0).into());
+
     // In, Default Coordinate System, Pen Up, Select first pen, reset line type, move to 0,0.
     let var_name = format!(
-        "IN;SC;PU;{}LT;PU{},{};",
+        "IN;SC;PU;{}LT;PU{x_origin},{y_origin};",
         pen_change(first_pen),
-        print_bed.mm_to_hpgl_units_x(0.0),
-        print_bed.mm_to_hpgl_units_y(0.0)
     );
     let mut hpgl = var_name;
 
@@ -58,11 +61,7 @@ pub fn generate_hpgl(
         }
     }
 
-    hpgl.push_str(&format!(
-        "PU{},{};SP0;EC0;EC1;OE;",
-        print_bed.mm_to_hpgl_units_x(0.0),
-        print_bed.mm_to_hpgl_units_y(0.0)
-    ));
+    hpgl.push_str(&format!("PU{x_origin},{y_origin};SP0;EC0;EC1;OE;"));
 
     hpgl
 }

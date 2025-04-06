@@ -46,60 +46,24 @@ pub const BED_GCC_SPIRIT: PrintBed = PrintBed {
 };
 
 impl PrintBed {
-    /// Converts a mm value into HPGL/2 units.
+    /// Converts a [`PointInMillimeters`] into the same point in HPGL/2 units.
     ///
     /// # Arguments
-    /// * `value`: The value in mm.
-    /// * `mirror`: `None` if the value is not to be mirrored,
-    ///   `Some(max)` if the value is to be mirrored where `max` is the maximum value on that axis.
-    #[inline]
-    fn mm_to_hpgl_units(&self, mut value: f32, mirror: Option<f32>) -> i16 {
-        if let Some(max) = mirror {
-            value = max - value;
+    /// * `point`: The point to convert from mm.
+    pub fn point_mm_to_hpgl_units(&self, point: PointInMillimeters) -> ResolvedPoint {
+        #[inline]
+        fn mm_to_hpgl_units(mut value: f32, mirror: Option<f32>) -> i16 {
+            if let Some(max) = mirror {
+                value = max - value;
+            }
+
+            (value / MM_PER_PLOTTER_UNIT).round() as i16
         }
 
-        (value / MM_PER_PLOTTER_UNIT).round() as i16
-    }
-
-    /// Converts a mm value on the X axis into the value in HPGL/2 units.
-    ///
-    /// # Arguments
-    /// * `value`: The value in mm.
-    #[allow(clippy::cast_possible_truncation)]
-    pub fn mm_to_hpgl_units_x(&self, value: f32) -> i16 {
-        self.mm_to_hpgl_units(value, self.mirror_x.then_some(self.width))
-    }
-
-    /// Converts a mm value on the Y axis into the value in HPGL/2 units.
-    ///
-    /// # Arguments
-    /// * `value`: The value in mm.
-    #[allow(clippy::cast_possible_truncation)]
-    pub fn mm_to_hpgl_units_y(&self, value: f32) -> i16 {
-        self.mm_to_hpgl_units(value, self.mirror_y.then_some(self.height))
-    }
-
-    /// Takes a vector of points expressed in mm and turns them into a vector of resolved points.
-    ///
-    /// # Arguments
-    /// * `points`: Points in mm to resolve.
-    ///
-    /// # Returns
-    /// The provided points converted to HPGL/2 machine units.
-    pub fn points_in_mm_to_printer_units(
-        &self,
-        points: &[PointInMillimeters],
-    ) -> Vec<ResolvedPoint> {
-        let mut resolved_points = Vec::with_capacity(points.len());
-
-        for point in points {
-            resolved_points.push(ResolvedPoint {
-                x: self.mm_to_hpgl_units_x(point.x),
-                y: self.mm_to_hpgl_units_y(point.y),
-            });
+        ResolvedPoint {
+            x: mm_to_hpgl_units(point.x, self.mirror_x.then_some(self.width)),
+            y: mm_to_hpgl_units(point.y, self.mirror_y.then_some(self.height)),
         }
-
-        resolved_points
     }
 }
 
@@ -111,38 +75,42 @@ mod tests {
     fn test_mm_to_hpgl_units() {
         let bed = BED_GCC_SPIRIT;
 
-        assert_eq!(bed.mm_to_hpgl_units_y(10.0), 18128, "10mm");
-        assert_eq!(bed.mm_to_hpgl_units_x(0.0), 0, "0mm");
-        assert_eq!(bed.mm_to_hpgl_units_x(-0.0), 0, "-0mm");
+        assert_eq!(
+            bed.point_mm_to_hpgl_units((10.0, 10.0).into()),
+            (400, 18128).into(),
+            "10mm"
+        );
+        assert_eq!(
+            bed.point_mm_to_hpgl_units((0.0, 0.0).into()),
+            (0, 18528).into(),
+            "0mm"
+        );
+        assert_eq!(
+            bed.point_mm_to_hpgl_units((-0.0, -0.0).into()),
+            (0, 18528).into(),
+            "-0mm"
+        );
 
         // extreme values
-        assert_eq!(bed.mm_to_hpgl_units_x(f32::MAX), 32767, "f32::MAX mm");
         assert_eq!(
-            bed.mm_to_hpgl_units_x(819.175),
-            32767,
+            bed.point_mm_to_hpgl_units((f32::MAX, f32::MAX).into()),
+            (32767, -32768).into(),
+            "f32::MAX mm"
+        );
+        assert_eq!(
+            bed.point_mm_to_hpgl_units((819.175, 819.175).into()),
+            (32767, -14239).into(),
             "approx maximum computable value"
         );
-        assert_eq!(bed.mm_to_hpgl_units_x(f32::MIN), -32768, "f32::MIN mm");
         assert_eq!(
-            bed.mm_to_hpgl_units_x(-820.0),
-            -32768,
+            bed.point_mm_to_hpgl_units((f32::MIN, f32::MIN).into()),
+            (-32768, 32767).into(),
+            "f32::MIN mm"
+        );
+        assert_eq!(
+            bed.point_mm_to_hpgl_units((-820.0, -820.0).into()),
+            (-32768, 32767).into(),
             "approx minimum computable value"
         );
-    }
-
-    #[test]
-    fn test_points_in_mm_to_printer_units() {
-        let bed = BED_GCC_SPIRIT;
-
-        let points = &[
-            PointInMillimeters { x: 10.0, y: 10.0 },
-            PointInMillimeters { x: 11.0, y: 10.0 },
-        ];
-        let expected = &[
-            ResolvedPoint { x: 400, y: 18128 },
-            ResolvedPoint { x: 440, y: 18128 },
-        ];
-
-        assert_eq!(&bed.points_in_mm_to_printer_units(points), expected);
     }
 }
