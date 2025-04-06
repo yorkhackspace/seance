@@ -20,6 +20,7 @@ const MM_PER_PLOTTER_UNIT: f32 = 0.025;
 /// This is a point that is along a path that we wish to trace with the tool.
 /// The units are HPGL/2 units, which are rather nebulous and may vary from
 /// machine to machine in terms of their translation to mm.
+#[derive(Debug, PartialEq, Eq)]
 pub struct ResolvedPoint {
     /// Horizontal axis position.
     pub x: i16,
@@ -202,7 +203,7 @@ pub fn convert_points_to_plotter_units(
 }
 
 /// A point in terms of mm.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PointInMillimeters {
     /// Horizontal axis.
     pub x: f32,
@@ -296,4 +297,84 @@ fn points_in_mm_to_printer_units(points: &[PointInMillimeters]) -> Vec<ResolvedP
 pub fn mm_to_hpgl_units(mm: f32, is_x_axis: bool) -> i16 {
     let position_mm = if is_x_axis { mm } else { BED_HEIGHT_MM - mm };
     (position_mm / MM_PER_PLOTTER_UNIT).round() as i16
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mm_to_hpgl_units() {
+        assert_eq!(mm_to_hpgl_units(10.0, false), 18128, "10mm");
+        assert_eq!(mm_to_hpgl_units(0.0, true), 0, "0mm");
+        assert_eq!(mm_to_hpgl_units(-0.0, true), 0, "-0mm");
+
+        // extreme values
+        assert_eq!(mm_to_hpgl_units(f32::MAX, true), 32767, "f32::MAX mm");
+        assert_eq!(
+            mm_to_hpgl_units(819.175, true),
+            32767,
+            "approx maximum computable value"
+        );
+        assert_eq!(mm_to_hpgl_units(f32::MIN, true), -32768, "f32::MIN mm");
+        assert_eq!(
+            mm_to_hpgl_units(-820.0, true),
+            -32768,
+            "approx minimum computable value"
+        );
+    }
+
+    #[test]
+    fn test_points_in_mm_to_printer_units() {
+        let points = &[
+            PointInMillimeters { x: 10.0, y: 10.0 },
+            PointInMillimeters { x: 11.0, y: 10.0 },
+        ];
+        let expected = &[
+            ResolvedPoint { x: 400, y: 18128 },
+            ResolvedPoint { x: 440, y: 18128 },
+        ];
+
+        assert_eq!(&points_in_mm_to_printer_units(points), expected);
+    }
+
+    #[test]
+    fn test_filter_paths_to_tool_passes() {
+        let mut passes = crate::default_passes::default_passes();
+        // enable black
+        passes[0].set_enabled(true);
+
+        let mut paths = [
+            // black, is enabled
+            (
+                PathColour([0, 0, 0]),
+                vec![vec![PointInMillimeters { x: 15.0, y: 100.5 }]],
+            ),
+            // dark grey, not used as a tool pass
+            (
+                PathColour([10, 10, 10]),
+                vec![vec![PointInMillimeters { x: 500.0, y: -10.0 }]],
+            ),
+            // white - present but not enabled
+            (
+                PathColour([255, 255, 255]),
+                vec![vec![PointInMillimeters {
+                    x: -1010.5,
+                    y: -f32::MAX,
+                }]],
+            ),
+        ]
+        .into_iter()
+        .collect();
+
+        let expected = [(
+            PathColour([0, 0, 0]),
+            vec![vec![PointInMillimeters { x: 15.0, y: 100.5 }]],
+        )]
+        .into_iter()
+        .collect();
+
+        filter_paths_to_tool_passes(&mut paths, &passes);
+        assert_eq!(paths, expected)
+    }
 }
