@@ -48,22 +48,32 @@ pub const BED_GCC_SPIRIT: PrintBed = PrintBed {
 impl PrintBed {
     /// Converts a [`PointInMillimeters`] into the same point in HPGL/2 units.
     ///
+    /// Returns `None` if the point is out of the representable range of HPGL's 16-bit integers.
+    ///
     /// # Arguments
     /// * `point`: The point to convert from mm.
-    pub fn point_mm_to_hpgl_units(&self, point: PointInMillimeters) -> ResolvedPoint {
+    pub fn point_mm_to_hpgl_units(&self, point: PointInMillimeters) -> Option<ResolvedPoint> {
         #[inline]
-        fn mm_to_hpgl_units(mut value: f32, mirror: Option<f32>) -> i16 {
+        fn mm_to_hpgl_units(mut value: f32, mirror: Option<f32>) -> Option<i16> {
             if let Some(max) = mirror {
                 value = max - value;
             }
 
-            (value / MM_PER_PLOTTER_UNIT).round() as i16
+            let adjusted = value / MM_PER_PLOTTER_UNIT;
+            if adjusted > i16::MAX as f32 || adjusted < i16::MIN as f32 {
+                // value would be truncated
+                None
+            } else {
+                Some(adjusted.round() as i16)
+            }
         }
 
-        ResolvedPoint {
-            x: mm_to_hpgl_units(point.x, self.mirror_x.then_some(self.width)),
-            y: mm_to_hpgl_units(point.y, self.mirror_y.then_some(self.height)),
-        }
+        // TODO: check printer bed sizes won't automatically cause truncation
+
+        Some(ResolvedPoint {
+            x: mm_to_hpgl_units(point.x, self.mirror_x.then_some(self.width))?,
+            y: mm_to_hpgl_units(point.y, self.mirror_y.then_some(self.height))?,
+        })
     }
 }
 
@@ -76,41 +86,42 @@ mod tests {
         let bed = BED_GCC_SPIRIT;
 
         assert_eq!(
-            bed.point_mm_to_hpgl_units((10.0, 10.0).into()),
+            bed.point_mm_to_hpgl_units((10.0, 10.0).into()).unwrap(),
             (400, 18128).into(),
             "10mm"
         );
         assert_eq!(
-            bed.point_mm_to_hpgl_units((0.0, 0.0).into()),
+            bed.point_mm_to_hpgl_units((0.0, 0.0).into()).unwrap(),
             (0, 18528).into(),
             "0mm"
         );
         assert_eq!(
-            bed.point_mm_to_hpgl_units((-0.0, -0.0).into()),
+            bed.point_mm_to_hpgl_units((-0.0, -0.0).into()).unwrap(),
             (0, 18528).into(),
             "-0mm"
         );
 
         // extreme values
-        assert_eq!(
-            bed.point_mm_to_hpgl_units((f32::MAX, f32::MAX).into()),
-            (32767, -32768).into(),
+        assert!(
+            bed.point_mm_to_hpgl_units((f32::MAX, f32::MAX).into())
+                .is_none(),
             "f32::MAX mm"
         );
         assert_eq!(
-            bed.point_mm_to_hpgl_units((819.175, 819.175).into()),
+            bed.point_mm_to_hpgl_units((819.175, 819.175).into())
+                .unwrap(),
             (32767, -14239).into(),
             "approx maximum computable value"
         );
-        assert_eq!(
-            bed.point_mm_to_hpgl_units((f32::MIN, f32::MIN).into()),
-            (-32768, 32767).into(),
+        assert!(
+            bed.point_mm_to_hpgl_units((f32::MIN, f32::MIN).into())
+                .is_none(),
             "f32::MIN mm"
         );
-        assert_eq!(
-            bed.point_mm_to_hpgl_units((-820.0, -820.0).into()),
-            (-32768, 32767).into(),
-            "approx minimum computable value"
+        assert!(
+            bed.point_mm_to_hpgl_units((-818.0, -818.0).into())
+                .is_none(),
+            "negative values"
         );
     }
 }
