@@ -13,6 +13,8 @@ fn hackspace_logo() {
         tool.set_enabled(true);
     }
 
+    let bed = seance::bed::BED_GCC_SPIRIT;
+
     let paths = seance::svg::get_paths_grouped_by_colour(&design_file);
     insta::assert_debug_snapshot!("york hackspace logo SVG paths", &paths);
 
@@ -22,10 +24,10 @@ fn hackspace_logo() {
     seance::paths::filter_paths_to_tool_passes(&mut paths_in_mm, &tool_passes);
     insta::assert_debug_snapshot!("york hackspace logo filtered paths", &paths_in_mm);
 
-    let resolved_paths = seance::paths::convert_points_to_plotter_units(&paths_in_mm);
+    let resolved_paths = seance::paths::convert_points_to_plotter_units(&paths_in_mm, &bed);
     insta::assert_debug_snapshot!("york hackspace logo plotted paths", &resolved_paths);
 
-    let hpgl = seance::hpgl::generate_hpgl(&resolved_paths, &tool_passes);
+    let hpgl = seance::hpgl::generate_hpgl(&resolved_paths, &tool_passes, &bed);
     insta::assert_snapshot!("york hackspace logo HPGL output", &hpgl);
 
     let pcl = seance::pcl::wrap_hpgl_in_pcl(hpgl, design_name, &tool_passes);

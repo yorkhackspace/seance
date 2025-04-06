@@ -5,7 +5,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    paths::{mm_to_hpgl_units, PathColour, ResolvedPath},
+    bed::PrintBed,
+    paths::{PathColour, ResolvedPath},
     ToolPass,
 };
 
@@ -21,6 +22,7 @@ use crate::{
 pub fn generate_hpgl(
     resolved_paths: &HashMap<PathColour, Vec<ResolvedPath>>,
     tool_passes: &[ToolPass],
+    print_bed: &PrintBed,
 ) -> String {
     if tool_passes.len() != 16 {
         return "Exactly 16 tool passes are required".to_string();
@@ -38,8 +40,8 @@ pub fn generate_hpgl(
     let var_name = format!(
         "IN;SC;PU;{}LT;PU{},{};",
         pen_change(first_pen),
-        mm_to_hpgl_units(0.0, true),
-        mm_to_hpgl_units(0.0, false)
+        print_bed.mm_to_hpgl_units_x(0.0),
+        print_bed.mm_to_hpgl_units_y(0.0)
     );
     let mut hpgl = var_name;
 
@@ -58,8 +60,8 @@ pub fn generate_hpgl(
 
     hpgl.push_str(&format!(
         "PU{},{};SP0;EC0;EC1;OE;",
-        mm_to_hpgl_units(0.0, true),
-        mm_to_hpgl_units(0.0, false)
+        print_bed.mm_to_hpgl_units_x(0.0),
+        print_bed.mm_to_hpgl_units_y(0.0)
     ));
 
     hpgl

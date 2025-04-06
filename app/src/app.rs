@@ -28,9 +28,10 @@ use preview::{DesignPreview, MAX_ZOOM_LEVEL, MIN_ZOOM_LEVEL};
 
 use planchette::{
     seance::{
+        bed::BED_GCC_SPIRIT,
         default_passes,
         svg::{parse_svg, SVG_UNITS_PER_MM},
-        DesignFile, DesignOffset, ToolPass, BED_HEIGHT_MM, BED_WIDTH_MM,
+        DesignFile, DesignOffset, ToolPass,
     },
     PrintJob,
 };
@@ -1342,7 +1343,7 @@ fn ui_main(
                 tool_passes_widget(ui, ui_context, tool_passes, tool_pass_widget_states);
             });
             strip.cell(|ui| {
-                let ratio = BED_HEIGHT_MM / BED_WIDTH_MM;
+                let ratio = BED_GCC_SPIRIT.height / BED_GCC_SPIRIT.width;
                 let mut width = ui.available_width();
                 let mut height = width * ratio;
                 let max_height = ui.available_height() * 0.8;
@@ -1526,7 +1527,7 @@ fn design_preview_navigation(
                 let mut offset_x = current_offset.x;
                 let offset_x_slider = DragValue::new(&mut offset_x)
                     .max_decimals(2)
-                    .range(0.0..=BED_WIDTH_MM)
+                    .range(0.0..=BED_GCC_SPIRIT.width)
                     .clamp_existing_to_range(true);
                 if ui.add(offset_x_slider).changed() {
                     ui_context.send_ui_message(UIMessage::DesignOffsetChanged {
@@ -1541,7 +1542,7 @@ fn design_preview_navigation(
                 let mut offset_y = current_offset.y;
                 let offset_y_slider = DragValue::new(&mut offset_y)
                     .max_decimals(2)
-                    .range(0.0..=BED_HEIGHT_MM)
+                    .range(0.0..=BED_GCC_SPIRIT.height)
                     .clamp_existing_to_range(true);
                 if ui.add(offset_y_slider).changed() {
                     ui_context.send_ui_message(UIMessage::DesignOffsetChanged {

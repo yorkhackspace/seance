@@ -11,11 +11,12 @@ use lyon_algorithms::path::PathSlice;
 use lyon_algorithms::walk::{walk_along_path, RegularPattern, WalkerEvent};
 use usvg::Path;
 
-use crate::{DesignOffset, ToolPass, BED_HEIGHT_MM};
+use crate::bed::PrintBed;
+use crate::{DesignOffset, ToolPass};
 
 /// The number of mm that are moved per unit that the plotter is instructed to move.
 /// This is the HPGL/2 default specified in the HPGL/2 specification.
-const MM_PER_PLOTTER_UNIT: f32 = 0.025;
+pub const MM_PER_PLOTTER_UNIT: f32 = 0.025;
 
 /// This is a point that is along a path that we wish to trace with the tool.
 /// The units are HPGL/2 units, which are rather nebulous and may vary from
@@ -190,13 +191,14 @@ pub fn filter_paths_to_tool_passes(
 /// The paths expressed in plotter units.
 pub fn convert_points_to_plotter_units(
     paths_in_mm: &HashMap<PathColour, Vec<PathInMM>>,
+    print_bed: &PrintBed,
 ) -> HashMap<PathColour, Vec<ResolvedPath>> {
     let mut resolved_paths: HashMap<PathColour, Vec<ResolvedPath>> =
         HashMap::with_capacity(paths_in_mm.capacity());
     for (path_colour, paths) in paths_in_mm {
         for path in paths {
             let entry = resolved_paths.entry(*path_colour).or_default();
-            entry.push(points_in_mm_to_printer_units(path));
+            entry.push(print_bed.points_in_mm_to_printer_units(path));
         }
     }
     resolved_paths
@@ -267,76 +269,9 @@ fn offset_point(
     point.y += offset_y;
 }
 
-/// Takes a vector of points expressed in mm and turns them into a vector of resolved points.
-///
-/// # Arguments
-/// * `points`: Points in mm to resolve.
-///
-/// # Returns
-/// The provided points converted to HPGL/2 machine units.
-fn points_in_mm_to_printer_units(points: &[PointInMillimeters]) -> Vec<ResolvedPoint> {
-    let mut resolved_points = Vec::with_capacity(points.len());
-
-    for point in points {
-        resolved_points.push(ResolvedPoint {
-            x: mm_to_hpgl_units(point.x, true),
-            y: mm_to_hpgl_units(point.y, false),
-        });
-    }
-
-    resolved_points
-}
-
-/// Converts a mm value into the value in HPGL/2 units.
-///
-/// # Arguments
-/// * `mm`: The value in mm.
-/// * `is_x_axis`: The GCC Spirit has x=0 at the bottom. Generally we want 0,0 to be
-///   in the top-left, so we mirror the x axis in this case.
-#[allow(clippy::cast_possible_truncation)]
-pub fn mm_to_hpgl_units(mm: f32, is_x_axis: bool) -> i16 {
-    let position_mm = if is_x_axis { mm } else { BED_HEIGHT_MM - mm };
-    (position_mm / MM_PER_PLOTTER_UNIT).round() as i16
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_mm_to_hpgl_units() {
-        assert_eq!(mm_to_hpgl_units(10.0, false), 18128, "10mm");
-        assert_eq!(mm_to_hpgl_units(0.0, true), 0, "0mm");
-        assert_eq!(mm_to_hpgl_units(-0.0, true), 0, "-0mm");
-
-        // extreme values
-        assert_eq!(mm_to_hpgl_units(f32::MAX, true), 32767, "f32::MAX mm");
-        assert_eq!(
-            mm_to_hpgl_units(819.175, true),
-            32767,
-            "approx maximum computable value"
-        );
-        assert_eq!(mm_to_hpgl_units(f32::MIN, true), -32768, "f32::MIN mm");
-        assert_eq!(
-            mm_to_hpgl_units(-820.0, true),
-            -32768,
-            "approx minimum computable value"
-        );
-    }
-
-    #[test]
-    fn test_points_in_mm_to_printer_units() {
-        let points = &[
-            PointInMillimeters { x: 10.0, y: 10.0 },
-            PointInMillimeters { x: 11.0, y: 10.0 },
-        ];
-        let expected = &[
-            ResolvedPoint { x: 400, y: 18128 },
-            ResolvedPoint { x: 440, y: 18128 },
-        ];
-
-        assert_eq!(&points_in_mm_to_printer_units(points), expected);
-    }
 
     #[test]
     fn test_filter_paths_to_tool_passes() {
