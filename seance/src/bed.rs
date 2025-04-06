@@ -52,6 +52,9 @@ impl PrintBed {
     ///
     /// # Arguments
     /// * `point`: The point to convert from mm.
+    ///
+    /// # Panics
+    /// Panics when the values of `self` would cause truncation at the origin.
     pub fn point_mm_to_hpgl_units(&self, point: PointInMillimeters) -> Option<ResolvedPoint> {
         #[inline]
         fn mm_to_hpgl_units(mut value: f32, mirror: Option<f32>) -> Option<i16> {
@@ -68,7 +71,14 @@ impl PrintBed {
             }
         }
 
-        // TODO: check printer bed sizes won't automatically cause truncation
+        // check printer bed sizes won't automatically cause truncation
+        // TODO: do this in constructor?
+        if self.mirror_x && mm_to_hpgl_units(self.x_max, None).is_none() {
+            panic!("x-axis mirroring is enabled but the axis is so large it will be truncated")
+        }
+        if self.mirror_y && mm_to_hpgl_units(self.y_max, None).is_none() {
+            panic!("y-axis mirroring is enabled but the axis is so large it will be truncated")
+        }
 
         Some(ResolvedPoint {
             x: mm_to_hpgl_units(point.x, self.mirror_x.then_some(self.width))?,
