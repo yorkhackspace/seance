@@ -111,3 +111,15 @@ fn trace_path(path: &ResolvedPath) -> String {
 
     hpgl
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pen_change() {
+        assert_eq!(&pen_change(3), "SP4;");
+        assert_eq!(&pen_change(0), "SP1;");
+        // TODO: what is the desired behaviour for usize::MAX ?
+    }
+}
