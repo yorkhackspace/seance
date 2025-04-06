@@ -28,6 +28,16 @@ pub struct ResolvedPoint {
     /// Vertical axis position.
     pub y: i16,
 }
+
+impl From<(i16, i16)> for ResolvedPoint {
+    fn from(value: (i16, i16)) -> Self {
+        Self {
+            x: value.0,
+            y: value.1,
+        }
+    }
+}
+
 /// A path that the toolhead will move through, comprised of a series of points in-order.
 pub type ResolvedPath = Vec<ResolvedPoint>;
 /// A toolpath expressed as a series of points in mm.
@@ -224,6 +234,15 @@ impl From<lyon_algorithms::geom::euclid::Point2D<f32, UnknownUnit>> for PointInM
         PointInMillimeters {
             x: value.x,
             y: value.y,
+        }
+    }
+}
+
+impl From<(f32, f32)> for PointInMillimeters {
+    fn from(value: (f32, f32)) -> Self {
+        Self {
+            x: value.0,
+            y: value.1,
         }
     }
 }
