@@ -124,3 +124,69 @@ impl ToolPass {
         self.enabled = new_state;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tool_pass_new() {
+        assert_eq!(
+            ToolPass::new("non-restricted pass".to_string(), 0, 0, 0, 500, 100, true),
+            ToolPass {
+                name: "non-restricted pass".to_string(),
+                colour: [0, 0, 0],
+                power: 500,
+                speed: 100,
+                enabled: true
+            }
+        );
+
+        assert_eq!(
+            ToolPass::new(
+                "truncated power & speed pass".to_string(),
+                0,
+                0,
+                0,
+                10_000,
+                u64::MAX,
+                true
+            ),
+            ToolPass {
+                name: "truncated power & speed pass".to_string(),
+                colour: [0, 0, 0],
+                power: 1000,
+                speed: 1000,
+                enabled: true
+            }
+        );
+    }
+
+    #[test]
+    fn test_tool_pass_set_speed() {
+        let mut pass = ToolPass::new("".to_string(), 0, 0, 0, 100, 100, false);
+        assert_eq!(pass.speed, 100);
+
+        // should not truncate
+        pass.set_speed(500);
+        assert_eq!(pass.speed, 500);
+
+        // should truncate
+        pass.set_speed(1_000_000);
+        assert_eq!(pass.speed, 1000);
+    }
+
+    #[test]
+    fn test_tool_pass_set_power() {
+        let mut pass = ToolPass::new("".to_string(), 0, 0, 0, 100, 100, false);
+        assert_eq!(pass.power, 100);
+
+        // should not truncate
+        pass.set_power(10);
+        assert_eq!(pass.power, 10);
+
+        // should truncate
+        pass.set_power(1001);
+        assert_eq!(pass.power, 1000);
+    }
+}
