@@ -19,3 +19,7 @@ log = "0.4"
 lyon_algorithms = "1.0.4"
 serde = { version = "1", features = ["derive"] }
 usvg.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+rstest.workspace = true

@@ -1,0 +1,1192 @@
+---
+source: seance/tests/snapshot_tests.rs
+expression: "&resolved_paths"
+---
+{
+    PathColour(
+        [
+            0,
+            0,
+            0,
+        ],
+    ): [
+        [
+            ResolvedPoint {
+                x: 3004,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 3044,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 3084,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 3124,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 3164,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 3204,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 3244,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 3284,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 3324,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 3364,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 3404,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 3444,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 3484,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 3524,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 3564,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 3604,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 3644,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 3684,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 3724,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 3764,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 3804,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 3844,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 3884,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 3924,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 3964,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 4004,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 4044,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 4084,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 4124,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 4164,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 4204,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 4244,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 4284,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 4324,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 4364,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 4404,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 4444,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 4484,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 4524,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 4564,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 4604,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 4644,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 4684,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 4724,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 4764,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 4804,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 4844,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 4884,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 4924,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 4964,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 5004,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 5044,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 5084,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 5124,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 5164,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 5204,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 5244,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 5284,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 5324,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 5364,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 5404,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 5444,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 5484,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 5524,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 5564,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 5604,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 5644,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 5684,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 5724,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 5764,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 5804,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 5844,
+                y: 15124,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 15111,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 15071,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 15031,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 14991,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 14951,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 14911,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 14871,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 14831,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 14791,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 14751,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 14711,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 14671,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 14631,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 14591,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 14551,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 14511,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 14471,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 14431,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 14391,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 14351,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 14311,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 14271,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 14231,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 14191,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 14151,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 14111,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 14071,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 14031,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 13991,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 13951,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 13911,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 13871,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 13831,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 13791,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 13751,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 13711,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 13671,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 13631,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 13591,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 13551,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 13511,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 13471,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 13431,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 13391,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 13351,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 13311,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 13271,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 13231,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 13191,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 13151,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 13111,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 13071,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 13031,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 12991,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 12951,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 12911,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 12871,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 12831,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 12791,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 12751,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 12711,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 12671,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 12631,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 12591,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 12551,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 12511,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 12471,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 12431,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 12391,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 12351,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 12311,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 12271,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 12231,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 12191,
+            },
+            ResolvedPoint {
+                x: 5871,
+                y: 12151,
+            },
+            ResolvedPoint {
+                x: 5839,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 5799,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 5759,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 5719,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 5679,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 5639,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 5599,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 5559,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 5519,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 5479,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 5439,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 5399,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 5359,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 5319,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 5279,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 5239,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 5199,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 5159,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 5119,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 5079,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 5039,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 4999,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 4959,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 4919,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 4879,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 4839,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 4799,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 4759,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 4719,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 4679,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 4639,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 4599,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 4559,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 4519,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 4479,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 4439,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 4399,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 4359,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 4319,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 4279,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 4239,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 4199,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 4159,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 4119,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 4079,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 4039,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 3999,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 3959,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 3919,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 3879,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 3839,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 3799,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 3759,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 3719,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 3679,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 3639,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 3599,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 3559,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 3519,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 3479,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 3439,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 3399,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 3359,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 3319,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 3279,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 3239,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 3199,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 3159,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 3119,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 3079,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 3039,
+                y: 12143,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 12147,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 12187,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 12227,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 12267,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 12307,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 12347,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 12387,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 12427,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 12467,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 12507,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 12547,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 12587,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 12627,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 12667,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 12707,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 12747,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 12787,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 12827,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 12867,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 12907,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 12947,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 12987,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 13027,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 13067,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 13107,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 13147,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 13187,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 13227,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 13267,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 13307,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 13347,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 13387,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 13427,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 13467,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 13507,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 13547,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 13587,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 13627,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 13667,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 13707,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 13747,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 13787,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 13827,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 13867,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 13907,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 13947,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 13987,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 14027,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 14067,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 14107,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 14147,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 14187,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 14227,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 14267,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 14307,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 14347,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 14387,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 14427,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 14467,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 14507,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 14547,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 14587,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 14627,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 14667,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 14707,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 14747,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 14787,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 14827,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 14867,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 14907,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 14947,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 14987,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 15027,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 15067,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 15107,
+            },
+            ResolvedPoint {
+                x: 3004,
+                y: 15124,
+            },
+        ],
+    ],
+}

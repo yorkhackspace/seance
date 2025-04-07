@@ -3,10 +3,10 @@
 //! A utility for talking to devices that speak HPGL.
 
 pub mod default_passes;
-mod hpgl;
+pub mod hpgl;
 mod laser_passes;
-mod paths;
-mod pcl;
+pub mod paths;
+pub mod pcl;
 pub mod svg;
 
 use std::{fs, path::PathBuf};
