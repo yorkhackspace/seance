@@ -302,26 +302,19 @@ pub fn mm_to_hpgl_units(mm: f32, is_x_axis: bool) -> i16 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
-    #[test]
-    fn test_mm_to_hpgl_units() {
-        assert_eq!(mm_to_hpgl_units(10.0, false), 18128, "10mm");
-        assert_eq!(mm_to_hpgl_units(0.0, true), 0, "0mm");
-        assert_eq!(mm_to_hpgl_units(-0.0, true), 0, "-0mm");
-
-        // extreme values
-        assert_eq!(mm_to_hpgl_units(f32::MAX, true), 32767, "f32::MAX mm");
-        assert_eq!(
-            mm_to_hpgl_units(819.175, true),
-            32767,
-            "approx maximum computable value"
-        );
-        assert_eq!(mm_to_hpgl_units(f32::MIN, true), -32768, "f32::MIN mm");
-        assert_eq!(
-            mm_to_hpgl_units(-820.0, true),
-            -32768,
-            "approx minimum computable value"
-        );
+    #[rstest]
+    #[case::ten_mm(10.0, false, 18128)]
+    #[case::zero_mm(0.0, true, 0)]
+    #[case::minus_zero_mm(-0.0, true, 0)]
+    // extreme values
+    #[case::upper_limit_mm(f32::MAX, true, 32767)]
+    #[case::approx_max_computable(819.175, true, 32767)]
+    #[case::lower_limit_mm(f32::MIN, true, -32768)]
+    #[case::approx_min_computable(-820.0, true, -32768)]
+    fn test_mm_to_hpgl_units(#[case] val: f32, #[case] is_x_axis: bool, #[case] expected: i16) {
+        assert_eq!(mm_to_hpgl_units(val, is_x_axis), expected);
     }
 
     #[test]

@@ -115,11 +115,13 @@ fn trace_path(path: &ResolvedPath) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
-    #[test]
-    fn test_pen_change() {
-        assert_eq!(&pen_change(3), "SP4;");
-        assert_eq!(&pen_change(0), "SP1;");
+    #[rstest]
+    #[case(3, "SP4;")]
+    #[case(0, "SP1;")]
+    fn test_pen_change(#[case] idx: usize, #[case] expected: &str) {
+        assert_eq!(&pen_change(idx), expected);
         // TODO: what is the desired behaviour for usize::MAX ?
     }
 }
