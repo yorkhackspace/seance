@@ -11,7 +11,7 @@ use axum::{
     Json, Router,
 };
 use planchette::PrintJob;
-use seance::{cut_file, svg::parse_svg, SendToDeviceError, ToolPass};
+use seance::{bed::BED_GCC_SPIRIT, cut_file, svg::parse_svg, SendToDeviceError, ToolPass};
 
 #[tokio::main]
 async fn main() {
@@ -62,6 +62,7 @@ async fn send_file_to_device(Json(mut payload): Json<PrintJob>) -> impl IntoResp
         &tree,
         &payload.file_name,
         &payload.tool_passes,
+        &BED_GCC_SPIRIT,
         &PathBuf::from("/dev/usb/lp0"),
         &payload.offset,
     ) {
