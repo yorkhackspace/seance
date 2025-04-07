@@ -1,3 +1,5 @@
+use seance::ToolPass;
+
 #[test]
 fn logo() {
     let design_file = seance::svg::parse_svg(
@@ -36,9 +38,26 @@ fn black_rectangle() {
     let design_name = "rectangle";
     let offset = seance::DesignOffset { x: 0.0, y: 0.0 };
 
-    let mut tool_passes = seance::default_passes::default_passes();
-    for tool in &mut tool_passes {
-        tool.set_enabled(true);
+    let mut tool_passes = vec![ToolPass::new(
+        "Black Pass".to_string(),
+        0,
+        0,
+        0,
+        100,
+        20,
+        true,
+    )];
+    // add unused white passes
+    for i in 2..=16 {
+        tool_passes.push(ToolPass::new(
+            format!("White Pass #{i}"),
+            255,
+            255,
+            255,
+            100,
+            20,
+            true,
+        ))
     }
 
     let paths = seance::svg::get_paths_grouped_by_colour(&design_file);
