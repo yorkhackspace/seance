@@ -1,5 +1,0 @@
----
-source: seance/tests/snapshot_tests.rs
-expression: "&paths_in_mm"
----
-{}
