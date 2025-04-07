@@ -16,9 +16,6 @@ pub struct PrintBed {
     /// Generally we want 0,0 to be in the top-left, so we would mirror the x axis in this case.
     pub mirror_x: bool,
     /// Whether to "mirror" the Y axis.
-    ///
-    /// This might be desirable because, for example, the GCC Spirit has x=0 at the bottom.
-    /// Generally we want 0,0 to be in the top-left, so we would mirror the x axis in this case.
     pub mirror_y: bool,
 }
 
@@ -44,10 +41,12 @@ const VALID_MM_RANGE: RangeInclusive<f32> =
 impl PrintBed {
     /// Creates a new [`PrintBed`] specification.
     ///
-    /// Truncates/clamps `x_axis` and `y_axis` to their HPGL-representable range.
+    /// `x_axis` and `y_axis` are tuples of lower/upper limits of the bed in millimetres.
+    /// They will be clamped to their HPGL-representable range.
     ///
     /// # Panics
-    /// When `x_axis` or `y_axis` aren't in order.
+    /// - When `x_axis` or `y_axis` aren't in order.
+    /// - When `x_axis` or `y_axis` contain `Nan` or an infinity.
     pub fn new(
         mut x_axis: (f32, f32),
         mirror_x: bool,
@@ -55,12 +54,13 @@ impl PrintBed {
         mirror_y: bool,
     ) -> Self {
         #[inline]
-        fn clamp_mm_to_valid(val: &mut f32) {
+        fn validate(val: &mut f32) {
+            assert!(val.is_finite(), "{val} is not a finite number");
+
             if !VALID_MM_RANGE.contains(&val) {
                 let adjusted = val.clamp(*VALID_MM_RANGE.start(), *VALID_MM_RANGE.end());
                 log::warn!(
-                    "axis value {} would produce invalid HPGL values, truncating to {adjusted}",
-                    val
+                    "axis value {val} would produce invalid HPGL values, truncating to {adjusted}",
                 );
                 *val = adjusted
             }
@@ -75,10 +75,10 @@ impl PrintBed {
             "y axis values are the wrong way around"
         );
 
-        clamp_mm_to_valid(&mut x_axis.0);
-        clamp_mm_to_valid(&mut x_axis.1);
-        clamp_mm_to_valid(&mut y_axis.0);
-        clamp_mm_to_valid(&mut y_axis.1);
+        validate(&mut x_axis.0);
+        validate(&mut x_axis.1);
+        validate(&mut y_axis.0);
+        validate(&mut y_axis.1);
 
         Self {
             x_axis: x_axis.0..=x_axis.1,
@@ -94,9 +94,13 @@ impl PrintBed {
     ///
     /// # Arguments
     /// * `point`: The point to convert from mm.
+    ///
+    /// # Panics
+    /// When `point` contains a non-finite number.
     pub fn place_point(&self, point: PointInMillimeters) -> Option<ResolvedPoint> {
         #[inline]
         fn mm_to_hpgl(mut value: f32, mirror: Option<f32>) -> Option<i16> {
+            // TODO: this isn't correct behaviour if self.x_axis.start() < 0
             if let Some(max) = mirror {
                 value = max - value;
             }
@@ -113,6 +117,17 @@ impl PrintBed {
                 Some(adjusted.round() as i16)
             }
         }
+
+        assert!(
+            point.x.is_finite(),
+            "point x value {} is not finite",
+            point.x
+        );
+        assert!(
+            point.y.is_finite(),
+            "point y value {} is not finite",
+            point.y
+        );
 
         if !(self.x_axis.contains(&point.x)) {
             log::warn!(
