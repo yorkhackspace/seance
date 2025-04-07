@@ -1,22 +1,15 @@
+use std::{ops::RangeInclusive, sync::LazyLock};
+
 use crate::paths::{PointInMillimeters, ResolvedPoint, MM_PER_PLOTTER_UNIT};
 
 /// Dimensions and offset information for a given device's print bed.
 ///
 /// All measurements are in millimetres.
 pub struct PrintBed {
-    /// Minimum X position of the X axis.
-    pub x_min: f32,
-    /// Minimum Y position of the Y axis.
-    pub y_min: f32,
-    /// Maximum X position of the X axis.
-    pub x_max: f32,
-    /// Maximum Y position of the Y axis.
-    pub y_max: f32,
-    /// Width of the cutting area.
-    pub width: f32,
-    /// Height of the cutting area.
-    pub height: f32,
-    // TODO: are these values meaningfully different to x_max and y_max?
+    /// Value ranges of the X axis.
+    x_axis: RangeInclusive<f32>,
+    /// Value ranges of the Y axis.
+    y_axis: RangeInclusive<f32>,
     /// Whether to "mirror" the X axis.
     ///
     /// This might be desirable because, for example, the GCC Spirit has x=0 at the bottom.
@@ -30,31 +23,77 @@ pub struct PrintBed {
 }
 
 /// Bed configuration for the [GCC Spirit Laser Engraver](https://www.gccworld.com/product/laser-engraver-supremacy/spirit).
-pub const BED_GCC_SPIRIT: PrintBed = PrintBed {
-    // Actually -50.72 but the cutter refuses to move this far...
-    x_min: 0.0,
-    x_max: 901.52,
-    // Again, actually -4.80 but 🤷.
-    y_min: 0.0,
-    y_max: 463.20,
+pub static BED_GCC_SPIRIT: LazyLock<PrintBed> = LazyLock::new(|| {
+    PrintBed::new(
+        (
+            // actually -50.72 but the cutter refuses to move this far...
+            0.0, 901.52,
+        ),
+        false,
+        (
+            // Again, actually -4.80 but 🤷.
+            0.0, 463.20,
+        ),
+        true,
+    )
+});
 
-    width: 901.52,
-    height: 463.20,
-
-    mirror_x: false,
-    mirror_y: true,
-};
+const VALID_MM_RANGE: RangeInclusive<f32> =
+    (i16::MIN as f32 * MM_PER_PLOTTER_UNIT)..=(i16::MAX as f32 * MM_PER_PLOTTER_UNIT);
 
 impl PrintBed {
+    /// Creates a new [`PrintBed`] specification.
+    ///
+    /// Truncates/clamps `x_axis` and `y_axis` to their HPGL-representable range.
+    ///
+    /// # Panics
+    /// When `x_axis` or `y_axis` aren't in order.
+    pub fn new(
+        mut x_axis: (f32, f32),
+        mirror_x: bool,
+        mut y_axis: (f32, f32),
+        mirror_y: bool,
+    ) -> Self {
+        #[inline]
+        fn clamp_mm_to_valid(val: &mut f32) {
+            if !VALID_MM_RANGE.contains(&val) {
+                let adjusted = val.clamp(*VALID_MM_RANGE.start(), *VALID_MM_RANGE.end());
+                log::warn!(
+                    "axis value {} would produce invalid HPGL values, truncating to {adjusted}",
+                    val
+                );
+                *val = adjusted
+            }
+        }
+
+        assert!(
+            x_axis.0 <= x_axis.1,
+            "X axis values are the wrong way around"
+        );
+        assert!(
+            y_axis.0 <= y_axis.1,
+            "y axis values are the wrong way around"
+        );
+
+        clamp_mm_to_valid(&mut x_axis.0);
+        clamp_mm_to_valid(&mut x_axis.1);
+        clamp_mm_to_valid(&mut y_axis.0);
+        clamp_mm_to_valid(&mut y_axis.1);
+
+        Self {
+            x_axis: x_axis.0..=x_axis.1,
+            y_axis: y_axis.0..=y_axis.1,
+            mirror_x,
+            mirror_y,
+        }
+    }
+
     /// Converts a [`PointInMillimeters`] into the same point in HPGL/2 units **for this printer**.
     ///
     /// Returns `None` if the point is out of the bed of this printer.
     ///
     /// # Arguments
     /// * `point`: The point to convert from mm.
-    ///
-    /// # Panics
-    /// Panics when the values of `self` would cause truncation at the origin.
     pub fn place_point(&self, point: PointInMillimeters) -> Option<ResolvedPoint> {
         #[inline]
         fn mm_to_hpgl(mut value: f32, mirror: Option<f32>) -> Option<i16> {
@@ -63,29 +102,59 @@ impl PrintBed {
             }
 
             let adjusted = value / MM_PER_PLOTTER_UNIT;
-            if adjusted > i16::MAX as f32 || adjusted < i16::MIN as f32 {
+            if !((i16::MIN as f32)..=(i16::MAX as f32)).contains(&adjusted) {
                 // value would be truncated
+                log::warn!(
+                    "HPGL value {adjusted} from {value}mm is out of i16 range: {:?}",
+                    (i16::MIN..=i16::MAX)
+                );
                 None
             } else {
                 Some(adjusted.round() as i16)
             }
         }
 
-        // check printer bed sizes won't automatically cause truncation
-        // TODO: do this in constructor?
-        debug_assert!(
-            self.mirror_x && mm_to_hpgl(self.x_max, None).is_none(),
-            "x-axis mirroring is enabled but the axis is so large it would truncate"
-        );
-        debug_assert!(
-            self.mirror_y && mm_to_hpgl(self.y_max, None).is_none(),
-            "y-axis mirroring is enabled but the axis is so large it would truncate"
-        );
+        if !(self.x_axis.contains(&point.x)) {
+            log::warn!(
+                "x-axis value {}mm is outside of bed size {:?}",
+                point.x,
+                self.x_axis,
+            );
+            return None;
+        }
+        if !(self.y_axis.contains(&point.y)) {
+            log::warn!(
+                "y-axis value {}mm is outside of bed size {:?}",
+                point.y,
+                self.y_axis,
+            );
+            return None;
+        }
 
         Some(ResolvedPoint {
-            x: mm_to_hpgl(point.x, self.mirror_x.then_some(self.width))?,
-            y: mm_to_hpgl(point.y, self.mirror_y.then_some(self.height))?,
+            x: mm_to_hpgl(point.x, self.mirror_x.then_some(*self.x_axis.end()))?,
+            y: mm_to_hpgl(point.y, self.mirror_y.then_some(*self.y_axis.end()))?,
         })
+    }
+
+    /// Gets the x axis value range of this print bed in millimetres.
+    pub fn x_axis(&self) -> &RangeInclusive<f32> {
+        &self.x_axis
+    }
+
+    /// Gets the y axis value range of this print bed in millimetres.
+    pub fn y_axis(&self) -> &RangeInclusive<f32> {
+        &self.y_axis
+    }
+
+    /// Gets the width of this print bed in millimetres.
+    pub fn width(&self) -> f32 {
+        self.x_axis.end() - self.x_axis.start()
+    }
+
+    /// Gets the height of this print bed in millimetres.
+    pub fn height(&self) -> f32 {
+        self.y_axis.end() - self.y_axis.start()
     }
 }
 
@@ -95,7 +164,7 @@ mod tests {
 
     #[test]
     fn test_mm_to_hpgl_units() {
-        let bed = BED_GCC_SPIRIT;
+        let bed = &BED_GCC_SPIRIT;
 
         assert_eq!(
             bed.place_point((10.0, 10.0).into()).unwrap(),
@@ -119,9 +188,9 @@ mod tests {
             "f32::MAX mm"
         );
         assert_eq!(
-            bed.place_point((819.175, 819.175).into()).unwrap(),
-            (32767, -14239).into(),
-            "approx maximum computable value"
+            bed.place_point((819.175, 462.0).into()).unwrap(),
+            (32767, 48).into(),
+            "bed maximum"
         );
         assert!(
             bed.place_point((f32::MIN, f32::MIN).into()).is_none(),

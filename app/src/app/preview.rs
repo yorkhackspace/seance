@@ -313,8 +313,8 @@ fn render_inner(
     let texture_height = zoomed_bounding_box_height.floor() as u32;
 
     // Work out how many pixels correspond to 1mm in each dimension.
-    let pixels_per_mm_x = zoomed_bounding_box_width / BED_GCC_SPIRIT.width;
-    let pixels_per_mm_y = zoomed_bounding_box_height / BED_GCC_SPIRIT.height;
+    let pixels_per_mm_x = zoomed_bounding_box_width / BED_GCC_SPIRIT.width();
+    let pixels_per_mm_y = zoomed_bounding_box_height / BED_GCC_SPIRIT.height();
 
     // We want to place a marker every 10mm to give the user a point of reference, so we need to work out how many pixels correspond to 10mm.
     let pixels_per_10_mm_x = pixels_per_mm_x * 10.0;

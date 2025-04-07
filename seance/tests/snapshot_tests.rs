@@ -13,7 +13,7 @@ fn hackspace_logo() {
         tool.set_enabled(true);
     }
 
-    let bed = seance::bed::BED_GCC_SPIRIT;
+    let bed = &seance::bed::BED_GCC_SPIRIT;
 
     let paths = seance::svg::get_paths_grouped_by_colour(&design_file);
     insta::assert_debug_snapshot!("york hackspace logo SVG paths", &paths);
