@@ -7,4 +7,4 @@ useradd -G lp planchette || true
 
 chown root:lp /usr/bin/planchette
 systemctl enable planchette.service
-systemctl start planchette.service
+systemctl restart planchette.service
