@@ -108,7 +108,7 @@ impl PrintBed {
             let adjusted = value / MM_PER_PLOTTER_UNIT;
             if !((i16::MIN as f32)..=(i16::MAX as f32)).contains(&adjusted) {
                 // value would be truncated
-                log::warn!(
+                log::error!(
                     "HPGL value {adjusted} from {value}mm is out of i16 range: {:?}",
                     (i16::MIN..=i16::MAX)
                 );
@@ -130,7 +130,7 @@ impl PrintBed {
         );
 
         if !(self.x_axis.contains(&point.x)) {
-            log::warn!(
+            log::error!(
                 "x-axis value {}mm is outside of bed size {:?}",
                 point.x,
                 self.x_axis,
@@ -138,7 +138,7 @@ impl PrintBed {
             return None;
         }
         if !(self.y_axis.contains(&point.y)) {
-            log::warn!(
+            log::error!(
                 "y-axis value {}mm is outside of bed size {:?}",
                 point.y,
                 self.y_axis,
