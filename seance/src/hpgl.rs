@@ -96,18 +96,20 @@ fn pen_change(pen_index: usize) -> String {
 fn trace_path(path: &ResolvedPath) -> String {
     let mut hpgl = String::new();
 
-    // Pen Down.
+    // Move to starting position with pen up, then pen down.
     if let Some(point) = path.first() {
         let x = point.x;
         let y = point.y;
-        hpgl.push_str(&format!("PU{x},{y};"));
+        hpgl.push_str(&format!("PU{x},{y};PD{x},{y};"));
     }
 
+    let mut point_strs = vec![];
     for point in path {
         let x = point.x;
         let y = point.y;
-        hpgl.push_str(&format!("PD{x},{y};"));
+        point_strs.push(format!("{x},{y}"));
     }
+    hpgl.push_str(&format!("PA{};PU;", point_strs.join(",")));
 
     hpgl
 }
