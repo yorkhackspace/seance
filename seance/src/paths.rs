@@ -11,21 +11,33 @@ use lyon_algorithms::path::PathSlice;
 use lyon_algorithms::walk::{walk_along_path, RegularPattern, WalkerEvent};
 use usvg::Path;
 
-use crate::{DesignOffset, ToolPass, BED_HEIGHT_MM};
+use crate::bed::PrintBed;
+use crate::{DesignOffset, ToolPass};
 
 /// The number of mm that are moved per unit that the plotter is instructed to move.
 /// This is the HPGL/2 default specified in the HPGL/2 specification.
-const MM_PER_PLOTTER_UNIT: f32 = 0.025;
+pub const MM_PER_PLOTTER_UNIT: f32 = 0.025;
 
 /// This is a point that is along a path that we wish to trace with the tool.
 /// The units are HPGL/2 units, which are rather nebulous and may vary from
 /// machine to machine in terms of their translation to mm.
+#[derive(Debug, PartialEq, Eq)]
 pub struct ResolvedPoint {
     /// Horizontal axis position.
     pub x: i16,
     /// Vertical axis position.
     pub y: i16,
 }
+
+impl From<(i16, i16)> for ResolvedPoint {
+    fn from(value: (i16, i16)) -> Self {
+        Self {
+            x: value.0,
+            y: value.1,
+        }
+    }
+}
+
 /// A path that the toolhead will move through, comprised of a series of points in-order.
 pub type ResolvedPath = Vec<ResolvedPoint>;
 /// A toolpath expressed as a series of points in mm.
@@ -189,20 +201,25 @@ pub fn filter_paths_to_tool_passes(
 /// The paths expressed in plotter units.
 pub fn convert_points_to_plotter_units(
     paths_in_mm: &HashMap<PathColour, Vec<PathInMM>>,
+    print_bed: &PrintBed,
 ) -> HashMap<PathColour, Vec<ResolvedPath>> {
     let mut resolved_paths: HashMap<PathColour, Vec<ResolvedPath>> =
         HashMap::with_capacity(paths_in_mm.capacity());
     for (path_colour, paths) in paths_in_mm {
         for path in paths {
             let entry = resolved_paths.entry(*path_colour).or_default();
-            entry.push(points_in_mm_to_printer_units(path));
+            entry.push(
+                path.into_iter()
+                    .map(|p| print_bed.place_point(*p).expect("point is unrepresentable"))
+                    .collect(),
+            );
         }
     }
     resolved_paths
 }
 
 /// A point in terms of mm.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PointInMillimeters {
     /// Horizontal axis.
     pub x: f32,
@@ -221,6 +238,15 @@ impl From<lyon_algorithms::geom::euclid::Point2D<f32, UnknownUnit>> for PointInM
         PointInMillimeters {
             x: value.x,
             y: value.y,
+        }
+    }
+}
+
+impl From<(f32, f32)> for PointInMillimeters {
+    fn from(value: (f32, f32)) -> Self {
+        Self {
+            x: value.0,
+            y: value.1,
         }
     }
 }
@@ -266,34 +292,47 @@ fn offset_point(
     point.y += offset_y;
 }
 
-/// Takes a vector of points expressed in mm and turns them into a vector of resolved points.
-///
-/// # Arguments
-/// * `points`: Points in mm to resolve.
-///
-/// # Returns
-/// The provided points converted to HPGL/2 machine units.
-fn points_in_mm_to_printer_units(points: &[PointInMillimeters]) -> Vec<ResolvedPoint> {
-    let mut resolved_points = Vec::with_capacity(points.len());
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    for point in points {
-        resolved_points.push(ResolvedPoint {
-            x: mm_to_hpgl_units(point.x, true),
-            y: mm_to_hpgl_units(point.y, false),
-        });
+    #[test]
+    fn test_filter_paths_to_tool_passes() {
+        let mut passes = crate::default_passes::default_passes();
+        // enable black
+        passes[0].set_enabled(true);
+
+        let mut paths = [
+            // black, is enabled
+            (
+                PathColour([0, 0, 0]),
+                vec![vec![PointInMillimeters { x: 15.0, y: 100.5 }]],
+            ),
+            // dark grey, not used as a tool pass
+            (
+                PathColour([10, 10, 10]),
+                vec![vec![PointInMillimeters { x: 500.0, y: -10.0 }]],
+            ),
+            // white - present but not enabled
+            (
+                PathColour([255, 255, 255]),
+                vec![vec![PointInMillimeters {
+                    x: -1010.5,
+                    y: -f32::MAX,
+                }]],
+            ),
+        ]
+        .into_iter()
+        .collect();
+
+        let expected = [(
+            PathColour([0, 0, 0]),
+            vec![vec![PointInMillimeters { x: 15.0, y: 100.5 }]],
+        )]
+        .into_iter()
+        .collect();
+
+        filter_paths_to_tool_passes(&mut paths, &passes);
+        assert_eq!(paths, expected)
     }
-
-    resolved_points
-}
-
-/// Converts a mm value into the value in HPGL/2 units.
-///
-/// # Arguments
-/// * `mm`: The value in mm.
-/// * `is_x_axis`: The GCC Spirit has x=0 at the bottom. Generally we want 0,0 to be
-///   in the top-left, so we mirror the x axis in this case.
-#[allow(clippy::cast_possible_truncation)]
-pub fn mm_to_hpgl_units(mm: f32, is_x_axis: bool) -> i16 {
-    let position_mm = if is_x_axis { mm } else { BED_HEIGHT_MM - mm };
-    (position_mm / MM_PER_PLOTTER_UNIT).round() as i16
 }

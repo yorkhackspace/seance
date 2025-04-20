@@ -1,0 +1,5 @@
+---
+source: seance/tests/snapshot_tests.rs
+expression: "&resolved_paths"
+---
+{}
