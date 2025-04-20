@@ -113,3 +113,33 @@ fn trace_path(path: &ResolvedPath) -> String {
 
     hpgl
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case(3, "SP4;")]
+    #[case(0, "SP1;")]
+    fn test_pen_change(#[case] idx: usize, #[case] expected: &str) {
+        assert_eq!(&pen_change(idx), expected);
+        // TODO: what is the desired behaviour for usize::MAX ?
+    }
+
+    #[test]
+    fn test_generate_hpgl_failures() {
+        let mut passes = crate::default_passes::default_passes();
+
+        assert_eq!(
+            generate_hpgl(&HashMap::new(), &passes),
+            "No tool passes enabled".to_string()
+        );
+
+        passes[0].set_enabled(true);
+        assert_eq!(
+            generate_hpgl(&HashMap::new(), &passes[0..5]),
+            "Exactly 16 tool passes are required".to_string()
+        )
+    }
+}
