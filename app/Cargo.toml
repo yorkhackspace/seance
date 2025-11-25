@@ -9,7 +9,7 @@ rust-version.workspace = true
 eframe = { version = "0.31.1", default-features = false, features = [
     "accesskit",
     "default_fonts",
-    "wgpu",
+    "glow",
     "persistence",
     "x11",
     "wayland"

@@ -28,7 +28,7 @@ fn main() -> eframe::Result {
             .with_min_inner_size([640.0, 480.0])
             .with_drag_and_drop(true)
             .with_icon(icon),
-        renderer: eframe::Renderer::Wgpu,
+        renderer: eframe::Renderer::Glow,
         persist_window: true,
         ..Default::default()
     };
