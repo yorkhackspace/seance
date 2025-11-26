@@ -5,7 +5,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    paths::{mm_to_hpgl_units, PathColour, ResolvedPath},
+    bed::PrintBed,
+    paths::{PathColour, ResolvedPath, ResolvedPoint},
     ToolPass,
 };
 
@@ -21,6 +22,7 @@ use crate::{
 pub fn generate_hpgl(
     resolved_paths: &HashMap<PathColour, Vec<ResolvedPath>>,
     tool_passes: &[ToolPass],
+    print_bed: &PrintBed,
 ) -> String {
     if tool_passes.len() != 16 {
         return "Exactly 16 tool passes are required".to_string();
@@ -34,12 +36,17 @@ pub fn generate_hpgl(
         return "No tool passes enabled".to_string();
     };
 
+    let ResolvedPoint {
+        x: x_origin,
+        y: y_origin,
+    } = print_bed
+        .place_point((0.0, 0.0).into())
+        .expect("adjusted origin point of print bed is unrepresentable in HPGL");
+
     // In, Default Coordinate System, Pen Up, Select first pen, reset line type, move to 0,0.
     let var_name = format!(
-        "IN;SC;PU;{}LT;PU{},{};",
+        "IN;SC;PU;{}LT;PU{x_origin},{y_origin};",
         pen_change(first_pen),
-        mm_to_hpgl_units(0.0, true),
-        mm_to_hpgl_units(0.0, false)
     );
     let mut hpgl = var_name;
 
@@ -56,11 +63,7 @@ pub fn generate_hpgl(
         }
     }
 
-    hpgl.push_str(&format!(
-        "PU{},{};SP0;EC0;EC1;OE;",
-        mm_to_hpgl_units(0.0, true),
-        mm_to_hpgl_units(0.0, false)
-    ));
+    hpgl.push_str(&format!("PU{x_origin},{y_origin};SP0;EC0;EC1;OE;"));
 
     hpgl
 }
@@ -112,4 +115,16 @@ fn trace_path(path: &ResolvedPath) -> String {
     hpgl.push_str(&format!("PA{};PU;", point_strs.join(",")));
 
     hpgl
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pen_change() {
+        assert_eq!(&pen_change(3), "SP4;");
+        assert_eq!(&pen_change(0), "SP1;");
+        // TODO: what is the desired behaviour for usize::MAX ?
+    }
 }

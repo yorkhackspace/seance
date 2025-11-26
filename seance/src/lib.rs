@@ -2,15 +2,17 @@
 //!
 //! A utility for talking to devices that speak HPGL.
 
+pub mod bed;
 pub mod default_passes;
-mod hpgl;
+pub mod hpgl;
 mod laser_passes;
-mod paths;
-mod pcl;
+pub mod paths;
+pub mod pcl;
 pub mod svg;
 
 use std::{fs, path::PathBuf};
 
+use bed::PrintBed;
 use hpgl::generate_hpgl;
 pub use laser_passes::ToolPass;
 pub use paths::resolve_paths;
@@ -18,24 +20,6 @@ use paths::{convert_points_to_plotter_units, filter_paths_to_tool_passes};
 use pcl::wrap_hpgl_in_pcl;
 use serde::{Deserialize, Serialize};
 use svg::get_paths_grouped_by_colour;
-
-/// Minimum X position of the X axis in mm.
-/// Actually -50.72 but the cutter refuses to move this far...
-pub const BED_X_AXIS_MINIMUM_MM: f32 = 0.0;
-/// Maximum X position of the X axis in mm.
-/// Actual value.
-pub const BED_X_AXIS_MAXIMUM_MM: f32 = 901.52;
-/// Minimum Y position of the Y axis in mm.
-/// Again, actually -4.80 but 🤷.
-pub const BED_Y_AXIS_MINIMUM_MM: f32 = 0.0;
-/// Maximum Y position of the Y axis in mm.
-/// Actual value.
-pub const BED_Y_AXIS_MAXIMUM_MM: f32 = 463.20;
-
-/// The width of the cutting area, in mm.
-pub const BED_WIDTH_MM: f32 = BED_X_AXIS_MAXIMUM_MM;
-/// The height of the cutting area, in mm.
-pub const BED_HEIGHT_MM: f32 = BED_Y_AXIS_MAXIMUM_MM;
 
 /// A loaded design.
 pub struct DesignFile {
@@ -107,14 +91,15 @@ pub fn cut_file(
     design_file: &usvg::Tree,
     design_name: &str,
     tool_passes: &Vec<ToolPass>,
+    print_bed: &PrintBed,
     print_device: &PathBuf,
     offset: &DesignOffset,
 ) -> Result<(), SendToDeviceError> {
     let paths = get_paths_grouped_by_colour(design_file);
     let mut paths_in_mm = resolve_paths(&paths, offset, 1.0);
     filter_paths_to_tool_passes(&mut paths_in_mm, tool_passes);
-    let resolved_paths = convert_points_to_plotter_units(&paths_in_mm);
-    let hpgl = generate_hpgl(&resolved_paths, tool_passes);
+    let resolved_paths = convert_points_to_plotter_units(&paths_in_mm, print_bed);
+    let hpgl = generate_hpgl(&resolved_paths, tool_passes, print_bed);
     let pcl = wrap_hpgl_in_pcl(hpgl, design_name, tool_passes);
     fs::write(print_device, pcl.as_bytes()).unwrap();
 

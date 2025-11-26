@@ -26,3 +26,4 @@ opt-level = 2
 serde = { version = "1", features = ["derive"] }
 serde_json = "1.0.120"
 usvg = "0.45.0"
+insta = "1.42.2"
