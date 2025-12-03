@@ -2,5 +2,6 @@ Package: planchette
 Version: 1.0-1
 Section: base
 Priority: optional
-Architecture: armhf
+Architecture: arm64
 Description: Package to set up a "print server" for Seance.
+Maintainer: "YHS"

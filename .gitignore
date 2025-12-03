@@ -4,4 +4,6 @@
 /result
 /logo.png
 /planchette.deb
-/planchette-deb/usr/bin/planchette
+/planchette-deb/DEBIAN/control
+/packaged
+/packing
