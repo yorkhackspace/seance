@@ -13,7 +13,7 @@ fn main() {
             BuiltBinary::Planchette,
         ),
         (
-            TargetDistributionFamily::DebianArmv6l,
+            TargetDistributionFamily::DebianArmhf,
             BuiltBinary::Planchette,
         ),
         (
@@ -65,7 +65,7 @@ fn main() {
 enum TargetDistributionFamily {
     ArchX86_64,
     DebianArm64,
-    DebianArmv6l,
+    DebianArmhf,
     DebianX86_64,
     WindowsX86_64,
 }
@@ -75,7 +75,7 @@ impl TargetDistributionFamily {
         match self {
             TargetDistributionFamily::ArchX86_64 => BuildTarget::LinuxX86_64,
             TargetDistributionFamily::DebianArm64 => BuildTarget::LinuxAarch64,
-            TargetDistributionFamily::DebianArmv6l => BuildTarget::LinuxArmv6l,
+            TargetDistributionFamily::DebianArmhf => BuildTarget::LinuxArmv6l,
             TargetDistributionFamily::DebianX86_64 => BuildTarget::LinuxX86_64,
             TargetDistributionFamily::WindowsX86_64 => BuildTarget::WindowsX86_64,
         }
@@ -108,7 +108,7 @@ impl TargetDistributionFamily {
                     panic!("Packaging Seance for Debian (aarch64) is not supported!")
                 }
             },
-            TargetDistributionFamily::DebianArmv6l => match binary {
+            TargetDistributionFamily::DebianArmhf => match binary {
                 BuiltBinary::Planchette => package_planchette_debian_armv6l(
                     &project_root,
                     packaging_working_directory,
@@ -143,7 +143,7 @@ impl Display for TargetDistributionFamily {
         match self {
             TargetDistributionFamily::ArchX86_64 => write!(f, "Arch (x86_64)"),
             TargetDistributionFamily::DebianArm64 => write!(f, "Debian (arm64)"),
-            TargetDistributionFamily::DebianArmv6l => write!(f, "Debian (armhf)"),
+            TargetDistributionFamily::DebianArmhf => write!(f, "Debian (armhf)"),
             TargetDistributionFamily::DebianX86_64 => write!(f, "Debian (x86_64)"),
             TargetDistributionFamily::WindowsX86_64 => write!(f, "Windows (x86_64)"),
         }
@@ -317,7 +317,7 @@ impl Display for BuildTarget {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             BuildTarget::LinuxAarch64 => write!(f, "Linux (aarch64)"),
-            BuildTarget::LinuxArmv6l => write!(f, "Linux (armhf)"),
+            BuildTarget::LinuxArmv6l => write!(f, "Linux (arm6l)"),
             BuildTarget::LinuxX86_64 => write!(f, "Linux (x86_64)"),
             BuildTarget::WindowsX86_64 => write!(f, "Windows (x86_64)"),
         }
