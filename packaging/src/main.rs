@@ -408,11 +408,10 @@ fn handle_shelled_output(output: std::process::Output, cmd_name: &str) {
         println!("{stdout}");
     }
     let stderr = String::from_utf8(output.stderr);
-    if let Ok(stderr) = &stderr {
-        eprintln!("{stderr}");
-    }
     if !output.status.success() {
         let stderr = stderr.unwrap_or("unknown error".to_string());
         panic!("{cmd_name} failed: {stderr}")
+    } else if let Ok(stderr) = &stderr {
+        eprintln!("{stderr}");
     }
 }
