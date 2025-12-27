@@ -103,7 +103,12 @@ impl TargetDistributionFamily {
                 }
             },
             TargetDistributionFamily::DebianX86_64 => match binary {
-                BuiltBinary::Planchette => package_planchette_debian_x86_64(),
+                BuiltBinary::Planchette => package_planchette_debian_x86_64(
+                    &project_root,
+                    packaging_working_directory,
+                    packaging_target_directory,
+                    &binary_path,
+                ),
                 BuiltBinary::SeanceApp => package_seance_debian_x86_64(),
             },
             TargetDistributionFamily::WindowsX86_64 => match binary {
@@ -137,7 +142,7 @@ fn package_planchette_debian_armv6l(
     packaging_target_directory: &std::path::Path,
     built_binary_path: &std::path::Path,
 ) {
-    let working_directory = packaging_working_directory.join("planchette-armv6l");
+    let working_directory = packaging_working_directory.join("planchette-debian-armv6l");
     let deb_working_directory = working_directory.join("planchette-deb");
 
     copy_dir_all(&PathBuf::from("./planchette-deb"), &deb_working_directory)
@@ -175,8 +180,48 @@ fn package_planchette_debian_armv6l(
     handle_shelled_output(dpkg_deb_output, "dpkg-deb");
 }
 
-fn package_planchette_debian_x86_64() {
-    // TODO
+fn package_planchette_debian_x86_64(
+    project_root: &std::path::Path,
+    packaging_working_directory: &std::path::Path,
+    packaging_target_directory: &std::path::Path,
+    built_binary_path: &std::path::Path,
+) {
+    let working_directory = packaging_working_directory.join("planchette-debiaa-x86_64");
+    let deb_working_directory = working_directory.join("planchette-deb");
+
+    copy_dir_all(&PathBuf::from("./planchette-deb"), &deb_working_directory)
+        .expect("Failed to copy Debian packaging directory");
+
+    let usr_bin_path = deb_working_directory.join("usr/bin");
+    std::fs::create_dir_all(&usr_bin_path)
+        .expect("Failed to create usr/bin in debian packaging directory");
+
+    let binary_target_path = usr_bin_path.join("plancette");
+    std::fs::copy(built_binary_path, &binary_target_path)
+        .expect("Failed to copy planchette binary to packaging directory");
+
+    let chmod_output = std::process::Command::new("chmod")
+        .arg("755")
+        .arg(&binary_target_path)
+        .output()
+        .expect("Failed to chmod Planchette binary");
+    handle_shelled_output(chmod_output, "chmod");
+
+    std::fs::copy(
+        project_root.join("planchette/deb-control-x86_64"),
+        deb_working_directory.join("DEBIAN/control"),
+    )
+    .expect("Failed to copy deb-control-x86_64 to DEBIAN/control");
+
+    let dpkg_deb_output = std::process::Command::new("dpkg-deb")
+        .arg("--root-owner-group")
+        .arg("--build")
+        .arg(deb_working_directory)
+        // TODO: would be nice to add the version to the path here.
+        .arg(packaging_target_directory.join("planchette-amd64.deb"))
+        .output()
+        .expect("Failed to run dpkg-deb for planchette");
+    handle_shelled_output(dpkg_deb_output, "dpkg-deb");
 }
 
 fn package_seance_debian_x86_64() {
