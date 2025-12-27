@@ -2,7 +2,7 @@ use std::{collections::HashMap, fmt::Display, path::PathBuf};
 
 fn main() {
     let project_root = PathBuf::from("./");
-    let packaging_working_directory = project_root.join("packing");
+    let packaging_working_directory = project_root.join("packing-staging-temp");
     create_build_directory(&packaging_working_directory);
     let packaging_target_directory = project_root.join("packaged");
     create_build_directory(&packaging_target_directory);
