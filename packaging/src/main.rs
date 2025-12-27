@@ -247,12 +247,21 @@ impl Display for BuiltBinary {
 fn build_all_binaries(target_arch: BuildTarget) {
     let cross_target_str = format!(".#cross-{}", target_arch.arch_str());
 
-    let output = std::process::Command::new("nix")
+    let command_output = match target_arch {
+        BuildTarget::LinuxArmv6l | BuildTarget::LinuxX86_64 => std::process::Command::new("nix")
             .arg("build")
             .arg(cross_target_str)
             .output()
-        .expect("Failed to run nix build");
-    handle_shelled_output(output, "nix build");
+            .expect("Failed to run nix build"),
+        BuildTarget::WindowsX86_64 => std::process::Command::new("nix")
+            .arg("build")
+            .arg("--impure")
+            .arg(cross_target_str)
+            .env("NIXPKGS_ALLOW_UNSUPPORTED_SYSTEM", "1")
+            .output()
+            .expect("Failed to run nix build"),
+    };
+    handle_shelled_output(command_output, "nix build");
 }
 
 fn create_build_directory(directory: &std::path::Path) {

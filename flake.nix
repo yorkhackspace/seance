@@ -4,7 +4,7 @@
   # Cross-compilation shamelessly lifted from https://mediocregopher.com/posts/x-compiling-rust-with-nix
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
     flake-utils.url = "github:numtide/flake-utils";
 
     # Cross-compile
@@ -16,7 +16,6 @@
       url = "github:oxalica/rust-overlay";
       inputs = {
         nixpkgs.follows = "nixpkgs";
-        flake-utils.follows = "flake-utils";
       };
     };
   };
@@ -51,7 +50,6 @@
           makeBuildPackageAttrs = pkgsCross: {
             depsBuildBuild = [
               pkgsCross.stdenv.cc
-              pkgsCross.windows.pthreads
             ];
           };
         };
@@ -96,11 +94,11 @@
         crossSystem.config = buildTargets.${targetSystem}.crossSystemConfig;
       }));
 
-    in {
+    in rec {
       packages = eachCrossSystem
         (builtins.attrNames buildTargets)
         (buildSystem: targetSystem: let
-           pkgs = mkPkgs buildSystem null;
+          pkgs = mkPkgs buildSystem null;
           pkgsCross = mkPkgs buildSystem targetSystem;
           rustTarget = buildTargets.${targetSystem}.rustTarget;
 
@@ -139,6 +137,8 @@
             TARGET_CC = "${pkgsCross.stdenv.cc}/bin/${pkgsCross.stdenv.cc.targetPrefix}cc";
 
             CARGO_BUILD_TARGET = rustTarget;
+            CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUSTFLAGS =
+              "-L native=${pkgs.pkgsCross.mingwW64.windows.pthreads}/lib";
             CARGO_BUILD_RUSTFLAGS = [
               "-C" "target-feature=+crt-static"
 
@@ -162,10 +162,6 @@
           dpkg
         ];
         buildInputs = with pkgs; [
-          pkg-config
-
-          openssl.dev
-
           # So many things required for wgpu
           libxkbcommon
           libGL
