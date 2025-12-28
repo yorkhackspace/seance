@@ -71,6 +71,11 @@ async fn send_file_to_device(Json(mut payload): Json<PrintJob>) -> impl IntoResp
             format!("Error parsing design: {err}"),
         )
             .into_response(),
+        Err(SendToDeviceError::GenerateHpglError(err)) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error generating HPGL: {err}"),
+        )
+            .into_response(),
         Err(SendToDeviceError::FailedToWriteToPrinter(err)) => {
             (StatusCode::INTERNAL_SERVER_ERROR, err).into_response()
         }

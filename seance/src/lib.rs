@@ -87,6 +87,8 @@ pub enum SendToDeviceError {
     ErrorParsingSvg(usvg::Error),
     /// Failed to write to the printer port.
     FailedToWriteToPrinter(String),
+    /// Failed to generate valid HPGL.
+    GenerateHpglError(String),
 }
 
 /// Sends a design file to the printer-like device.
@@ -114,7 +116,8 @@ pub fn cut_file(
     let mut paths_in_mm = resolve_paths(&paths, offset, 1.0);
     filter_paths_to_tool_passes(&mut paths_in_mm, tool_passes);
     let resolved_paths = convert_points_to_plotter_units(&paths_in_mm);
-    let hpgl = generate_hpgl(&resolved_paths, tool_passes);
+    let hpgl = generate_hpgl(&resolved_paths, tool_passes)
+        .map_err(SendToDeviceError::GenerateHpglError)?;
     let pcl = wrap_hpgl_in_pcl(hpgl, design_name, tool_passes);
     fs::write(print_device, pcl.as_bytes()).unwrap();
 

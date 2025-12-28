@@ -21,9 +21,9 @@ use crate::{
 pub fn generate_hpgl(
     resolved_paths: &HashMap<PathColour, Vec<ResolvedPath>>,
     tool_passes: &[ToolPass],
-) -> String {
+) -> Result<String, String> {
     if tool_passes.len() != 16 {
-        return "Exactly 16 tool passes are required".to_string();
+        return Err("Exactly 16 tool passes are required".to_string());
     }
 
     let Some((first_pen, _)) = tool_passes
@@ -31,7 +31,7 @@ pub fn generate_hpgl(
         .enumerate()
         .find(|(_, pass)| *pass.enabled())
     else {
-        return "No tool passes enabled".to_string();
+        return Err("No tool passes enabled".to_string());
     };
 
     // In, Default Coordinate System, Pen Up, Select first pen, reset line type, move to 0,0.
@@ -62,7 +62,7 @@ pub fn generate_hpgl(
         mm_to_hpgl_units(0.0, false)
     ));
 
-    hpgl
+    Ok(hpgl)
 }
 
 /// Appends some HPGL to the end of an existing HPGL string.
